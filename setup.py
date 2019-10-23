@@ -4,7 +4,7 @@ import setuptools
 with open('README.md', 'r') as fh:
     long_description = fh.read()
 
-install_requires = []
+install_requires = ['sqlalchemy==1.3.8', 'pypyrus_logbook']
 
 author = rapo.__author__
 email = rapo.__email__
@@ -21,7 +21,7 @@ setuptools.setup(
     long_description=long_description,
     long_description_content_type='text/markdown',
     license=license,
-    # url='https://github.com/t3eHawk/rapo',
+    url='https://github.com/t3eHawk/rapo',
     install_requires=install_requires,
     packages=setuptools.find_packages(),
     classifiers=[

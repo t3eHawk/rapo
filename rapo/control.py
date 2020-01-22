@@ -53,6 +53,8 @@ class Control():
         self.table_errx = None
         self.table_erra = None
         self.table_errb = None
+
+        self._with_error = False
         pass
 
     def __str__(self):
@@ -160,6 +162,7 @@ class Control():
             self._process_id = int(result.inserted_primary_key[0])
         except:
             logger.error()
+            self._remember_error()
             return False
         else:
             logger.debug(f'{self} New record in {self.log} '
@@ -178,6 +181,7 @@ class Control():
                 self.table_x = self.parser.parse_table_x()
         except:
             logger.error()
+            self._remember_error()
             return False
         else:
             logger.info(f'{self} Control started at {self.start_date}')
@@ -192,6 +196,7 @@ class Control():
             self._save()
         except:
             logger.error()
+            self._remember_error()
             return False
         else:
             return True
@@ -204,6 +209,7 @@ class Control():
             self.executor.drop_temporary_tables()
         except:
             logger.error()
+            self._remember_error()
             return False
         else:
             logger.info(f'{self} Control finished')
@@ -260,11 +266,12 @@ class Control():
 
     def _done(self):
         try:
-            self.status = 'D' if logger.with_error is False else 'E'
+            self.status = 'D' if self._with_error is False else 'E'
             self._end_date = dt.datetime.now()
             self._update(status=self._status, end_date=self._end_date)
         except:
             logger.error()
+            self._remember_error()
             return False
         else:
             logger.info(f'{self} ended at {self.end_date}')
@@ -283,4 +290,8 @@ class Control():
         update = update.where(self.log.c.process_id == self._process_id)
         conn.execute(update)
         logger.debug(f'{self} {self.log} updated')
+        pass
+
+    def _remember_error(self):
+        self._with_error = True
         pass

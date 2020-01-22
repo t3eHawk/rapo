@@ -66,7 +66,10 @@ class Scheduler():
             signal.signal(signal.SIGINT, self.exit)
             logger.info('Starting scheduler...')
             self.schedule = dict(self.sked())
-            logger.debug(f'Schedule: {self.schedule}')
+            if self.schedule:
+                logger.debug(f'Schedule: {self.schedule}')
+            else:
+                logger.debug('Schedule is empty')
             self.server = logger.sysinfo.desc.hostname
             self.username = logger.sysinfo.desc.user
             self.pid = logger.sysinfo.desc.pid
@@ -135,7 +138,10 @@ class Scheduler():
         try:
             if int(self.moment) % 300 == 0:
                 self.schedule = dict(self.sked())
-                logger.debug(f'Schedule: {self.schedule}')
+                if self.schedule:
+                    logger.debug(f'Schedule: {self.schedule}')
+                else:
+                    logger.debug('Schedule is empty')
         except:
             logger.error()
         now = time.localtime(self.moment)
@@ -169,16 +175,22 @@ class Scheduler():
         select = table.select()
         result = conn.execute(select)
         for row in result:
-            name = row.control_name
-            status = True if row.status == 'Y' else False
-            schedule = {} if row.schedule is None else json.loads(row.schedule)
-            mday = schedule.get('mday')
-            wday = schedule.get('wday')
-            hour = schedule.get('hour')
-            min = schedule.get('min')
-            sec = schedule.get('sec')
-            yield name, {'status': status, 'mday': mday, 'wday': wday,
-                         'hour': hour, 'min': min, 'sec': sec}
+            try:
+                name = row.control_name
+                status = True if row.status == 'Y' else False
+                schedule = row.schedule
+                schedule = {} if schedule is None else json.loads(schedule)
+                mday = schedule.get('mday')
+                wday = schedule.get('wday')
+                hour = schedule.get('hour')
+                min = schedule.get('min')
+                sec = schedule.get('sec')
+            except:
+                logger.warning()
+                continue
+            else:
+                yield name, {'status': status, 'mday': mday, 'wday': wday,
+                             'hour': hour, 'min': min, 'sec': sec}
         logger.debug('Schedule retrieved')
 
     def match(self):

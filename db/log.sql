@@ -1,5 +1,5 @@
 CREATE TABLE rapo_log (
-  process_id    NUMBER GENERATED ALWAYS AS IDENTITY START WITH 1000000001,
+  process_id    NUMBER GENERATED ALWAYS AS IDENTITY START WITH 1000000001 INCREMENT BY 1 MAXVALUE 2000000000 NOCACHE,
   control_id    NUMBER,
   added         DATE,
   start_date    DATE,
@@ -22,7 +22,7 @@ CREATE TABLE rapo_log (
   updated_date   DATE,
   text_log      CLOB,
   CONSTRAINT rapo_log_pk PRIMARY KEY (process_id)
-)
+);
 
 CREATE INDEX rapo_log_control_id_ix ON rapo_log (control_id);
 CREATE INDEX rapo_log_start_date_ix ON rapo_log (start_date);

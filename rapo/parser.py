@@ -48,7 +48,7 @@ class Parser():
     def parse_errors(self):
         logger.debug(f'{self.control} Parsing errors...')
         errors = []
-        for item in json.loads(self.control.config.error):
+        for item in json.loads(self.control.config.error or '{}'):
             error = {}
 
             connexion = item.get('connexion', 'and').upper()
@@ -72,10 +72,10 @@ class Parser():
 
     def parse_output_x(self):
         logger.debug(f'{self.control} Parsing output...')
-        output_x = json.loads(self.control.config.output_x)
-        if output_x is None:
+        if self.control.config.output_x is None:
             return None
-        elif isinstance(output_x, dict) is True:
+        else:
+            output_x = json.loads(self.control.config.output_x)
             columns = output_x.get('columns', [])
             columns = list(map(lambda e: e.lower(), columns))
             logger.debug(f'{self.control} Output parsed')

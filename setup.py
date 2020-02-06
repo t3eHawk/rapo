@@ -5,7 +5,7 @@ with open('README.md', 'r') as fh:
     long_description = fh.read()
 
 install_requires = ['sqlalchemy==1.3.8', 'cx_Oracle==7.2.3',
-                    'pypyrus_logbook==0.0.2']
+                    'pepperoni==0.1.1']
 
 author = rapo.__author__
 email = rapo.__email__

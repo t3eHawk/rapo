@@ -501,7 +501,7 @@ class Control():
                 self.table_errors = self.executor.analyze()
                 self.errors = self.executor.count_errors()
                 self.success = self.fetched-self.errors
-                self.error_level = (self.errors/self.success)*100
+                self.error_level = (self.errors/self.fetched)*100
                 self._update(errors=self.errors,
                              success=self.success,
                              error_level=self.error_level)
@@ -519,7 +519,7 @@ class Control():
                 if self._last_error is not None:
                     raise self._last_error
 
-            self.error_level = (self.errors/self.success)*100
+            self.error_level = (self.errors/(self.success+self.errors))*100
             self._update(errors=self.errors,
                          success=self.success,
                          error_level=self.error_level)

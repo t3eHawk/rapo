@@ -10,7 +10,7 @@ CREATE TABLE rapo_ref_types (
 );
 INSERT INTO rapo_ref_types VALUES ('ANL', 'Analysis');
 INSERT INTO rapo_ref_types VALUES ('REC', 'Reconciliation');
-INSERT INTO rapo_ref_types VALUES ('KPI', 'Key Perfomance Indicator');
+INSERT INTO rapo_ref_types VALUES ('KPI', 'Key Performance Indicator');
 COMMIT;
 
 CREATE TABLE rapo_ref_methods (

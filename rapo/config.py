@@ -1,3 +1,8 @@
+"""Configurator.
+
+Contains configurator used to transfer parameters from user to application.
+"""
+
 import configparser
 import os
 

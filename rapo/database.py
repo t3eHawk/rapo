@@ -14,14 +14,15 @@ class Database():
     ckwargs = {'literal_binds': True}
 
     def __init__(self):
-        vendor = config['DATABASE']['vendor']
-        host = config['DATABASE']['host']
-        port = config['DATABASE']['port']
-        sid = config['DATABASE']['sid']
-        user = config['DATABASE']['user']
-        password = config['DATABASE']['password']
-        string = f'{vendor}://{user}:{password}@{host}:{port}/{sid}'
-        self.engine = sql.create_engine(string)
+        if config.has_section('DATABASE') is True:
+            vendor = config['DATABASE']['vendor']
+            host = config['DATABASE']['host']
+            port = config['DATABASE']['port']
+            sid = config['DATABASE']['sid']
+            user = config['DATABASE']['user']
+            password = config['DATABASE']['password']
+            string = f'{vendor}://{user}:{password}@{host}:{port}/{sid}'
+            self.engine = sql.create_engine(string)
         pass
 
     def connect(self):

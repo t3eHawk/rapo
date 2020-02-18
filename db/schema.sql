@@ -89,6 +89,7 @@ BEGIN
     INTO :new.control_id
     FROM dual;
 END;
+/
 
 CREATE TABLE rapo_config_bak AS SELECT * FROM rapo_config WHERE 1 = 0;
 ALTER TABLE rapo_config_bak ADD audit_action VARCHAR2(10);
@@ -181,6 +182,7 @@ BEGIN
       );
   END IF;
 END;
+/
 
 CREATE TABLE rapo_log (
   process_id    NUMBER,
@@ -230,6 +232,7 @@ BEGIN
     INTO :new.process_id
     FROM dual;
 END;
+/
 
 CREATE TABLE rapo_scheduler (
   id         NUMBER,
@@ -256,6 +259,7 @@ BEGIN
     INTO :new.id
     FROM dual;
 END;
+/
 
 CREATE OR REPLACE PROCEDURE rapo_control_hook (
   in_process_id NUMBER

@@ -373,12 +373,12 @@ class Executor():
             columns = []
             output_columns = self.control.output_columns
             if output_columns is None or len(output_columns) == 0:
-                if self.config.source_name is not None:
-                    columns.extend(self.config.table_source.columns)
-                if self.config.source_name_a is not None:
-                    columns.extend(self.config.table_source_a.columns)
-                if self.config.source_name_b is not None:
-                    columns.extend(self.config.table_source_b.columns)
+                if self.c.config.source_name is not None:
+                    columns.extend(self.c.table_source.columns)
+                if self.c.config.source_name_a is not None:
+                    columns.extend(self.c.table_source_a.columns)
+                if self.c.config.source_name_b is not None:
+                    columns.extend(self.c.table_source_b.columns)
             else:
                 for output_column in output_columns:
                     name = output_column['column']

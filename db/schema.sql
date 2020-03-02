@@ -266,4 +266,5 @@ CREATE OR REPLACE PROCEDURE rapo_control_hook (
 )
 AS
 BEGIN
+  NULL;
 END;

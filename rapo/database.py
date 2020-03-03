@@ -18,10 +18,15 @@ class Database():
             vendor = config['DATABASE']['vendor']
             host = config['DATABASE']['host']
             port = config['DATABASE']['port']
-            sid = config['DATABASE']['sid']
+            sid = config['DATABASE'].get('sid')
+            service = config['DATABASE'].get('service')
             user = config['DATABASE']['user']
             password = config['DATABASE']['password']
-            string = f'{vendor}://{user}:{password}@{host}:{port}/{sid}'
+            string = f'{vendor}://{user}:{password}@{host}:{port}'
+            if sid is not None:
+                string += f'/{sid}'
+            elif service is not None:
+                string += f'/?service_name={service}'
             self.engine = sql.create_engine(string)
         pass
 

@@ -1,11 +1,12 @@
+"""Setup of RAPO."""
+
 import rapo
 import setuptools
 
 with open('README.md', 'r') as fh:
     long_description = fh.read()
 
-install_requires = ['sqlalchemy>=1.3.8', 'cx_Oracle>=7.3.0',
-                    'pepperoni>=0.1.1']
+install_requires = ['sqlalchemy', 'cx_oracle', 'pepperoni']
 
 author = rapo.__author__
 email = rapo.__email__

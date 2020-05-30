@@ -1,11 +1,13 @@
 """Contains application scheduler."""
 
+import argparse
 import datetime as dt
 import json
 import os
+import platform
 import re
 import signal
-import subprocess
+import subprocess as sp
 import sys
 import threading as th
 import time
@@ -18,7 +20,7 @@ from .control import Control
 
 
 class Scheduler():
-    """Reflects application scheduler.
+    """Represents application scheduler.
 
     Application scheduler reads configuration from RAPO_CONFIG, schedule
     controls as a virtual jobs and run them when it is necessary in separate
@@ -77,26 +79,36 @@ class Scheduler():
         self.stop_date = None
         self.status = None
 
-        if len(logger.sysinfo.anons) > 0:
-            arg = logger.sysinfo.anons[0]
-            if arg == 'start':
-                exe = 'pythonw'
-                file = os.path.abspath(sys.argv[0])
+        argv = [arg for arg in sys.argv if arg.startswith('-') is False]
+        count = len(argv)
+        if count > 1:
+            act = argv[1]
+            if act == 'start':
+                exe = sys.executable
+                file = os.path.abspath(argv[0])
                 args = '--start'
+                kwargs = {}
+                kwargs['stdout'] = sp.DEVNULL
+                kwargs['stderr'] = sp.DEVNULL
+                if sys.platform.startswith('win') is True:
+                    kwargs['creationflags'] = sp.CREATE_NO_WINDOW
                 command = [exe, file, args]
-                subprocess.Popen(command)
-            elif arg == 'stop':
+                sp.Popen(command, **kwargs)
+            elif act == 'stop':
                 self._stop()
-            else:
-                logger.sysinfo.add('--start', required=False,
-                                   action='store_true')
-                logger.sysinfo.add('--stop', required=False,
-                                   action='store_true')
-                if logger.sysinfo.args.start is True:
-                    self._start()
-                elif logger.sysinfo.args.stop is True:
-                    self._stop()
-            sys.exit()
+        else:
+            parser = argparse.ArgumentParser()
+            parser.add_argument('--start',
+                                action='store_true',
+                                required=False)
+            parser.add_argument('--stop',
+                                action='store_true',
+                                required=False)
+            args, anons = parser.parse_known_args()
+            if args.start is True:
+                self._start()
+            elif args.stop is True:
+                self._stop()
         pass
 
     def start(self):
@@ -122,21 +134,22 @@ class Scheduler():
     def _start(self):
         try:
             self.__start()
-        except:
+        except Exception:
             logger.error()
         pass
 
     def __start(self):
         signal.signal(signal.SIGINT, self._exit)
+        signal.signal(signal.SIGTERM, self._exit)
         logger.info('Starting scheduler...')
         self.schedule = dict(self._sked())
         if self.schedule:
             logger.debug(f'Schedule: {self.schedule}')
         else:
             logger.debug('Schedule is empty')
-        self.server = logger.sysinfo.desc.hostname
-        self.username = logger.sysinfo.desc.user
-        self.pid = logger.sysinfo.desc.pid
+        self.server = platform.node()
+        self.username = os.getlogin()
+        self.pid = os.getpid()
         self.start_date = dt.datetime.now()
         self.status = 'W'
         conn = db.connect()
@@ -180,7 +193,7 @@ class Scheduler():
 
     def _kill(self):
         try:
-            os.kill(self.pid, signal.SIGINT)
+            os.kill(self.pid, signal.SIGTERM)
         except OSError:
             raise Warning(f'Scheduler at PID {self.pid} was not found')
         pass
@@ -191,7 +204,6 @@ class Scheduler():
         logger.info(f'Scheduler at PID {self.pid} stopped')
         self._kill()
         pass
-
 
     def _run(self):
         self._synchronize()
@@ -217,7 +229,7 @@ class Scheduler():
                     logger.debug(f'Schedule: {self.schedule}')
                 else:
                     logger.debug('Schedule is empty')
-        except:
+        except Exception:
             logger.error()
         now = time.localtime(self.moment)
         for name, params in self.schedule.items():
@@ -228,8 +240,8 @@ class Scheduler():
                     self._check(params['hour'], now.tm_hour) is True and
                     self._check(params['min'], now.tm_min) is True and
                     self._check(params['sec'], now.tm_sec) is True):
-                        self._register(name, self.moment)
-            except:
+                    self._register(name, self.moment)
+            except Exception:
                 logger.error()
         delay = time.time()-self.moment
         wait = 1-delay
@@ -260,7 +272,7 @@ class Scheduler():
                 hour = schedule.get('hour')
                 min = schedule.get('min')
                 sec = schedule.get('sec')
-            except:
+            except Exception:
                 logger.warning()
                 continue
             else:
@@ -282,7 +294,8 @@ class Scheduler():
         # Check if unit is a cycle and integer division with now is true.
         elif re.match(r'^/\d+$', unit) is not None:
             unit = int(re.search(r'\d+', unit).group())
-            if unit == 0: return False
+            if unit == 0:
+                return False
             return True if now % unit == 0 else False
         # Check if unit is a range and now is in this range.
         elif re.match(r'^\d+-\d+$', unit) is not None:
@@ -300,7 +313,7 @@ class Scheduler():
         try:
             logger.info(f'Adding control {name}[{moment}] to queue...')
             self.queue.put((name, moment))
-        except:
+        except Exception:
             logger.error()
         else:
             logger.info(f'Control {name}[{moment}] was added to queue')
@@ -314,7 +327,7 @@ class Scheduler():
                 try:
                     control = Control(name, _trigger=moment)
                     control.run()
-                except:
+                except Exception:
                     logger.error()
                 else:
                     self.queue.task_done()

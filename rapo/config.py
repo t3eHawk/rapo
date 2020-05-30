@@ -1,6 +1,6 @@
-"""Configurator.
+"""Contains application configurator.
 
-Contains configurator used to transfer parameters from user to application.
+Used to transfer parameters from user to application.
 """
 
 import configparser

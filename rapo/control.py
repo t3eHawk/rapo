@@ -1,4 +1,4 @@
-"""Contains class used as an interface of RAPO control."""
+"""Contains class used as an API of single RAPO control."""
 
 import datetime as dt
 import threading as th
@@ -12,10 +12,7 @@ from .utils import utils
 
 
 class Control():
-    """Represents RAPO control.
-
-    Contains all elements needed to get all necessary control information and
-    run it.
+    """Represents single RAPO control and acts like its API.
 
     Parameters
     ----------

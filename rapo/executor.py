@@ -1,7 +1,4 @@
-"""Executor.
-
-Contains executor responsible for control execution steps.
-"""
+"""Contains executor responsible for control execution steps."""
 
 import sqlalchemy as sql
 

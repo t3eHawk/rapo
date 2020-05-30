@@ -1,7 +1,6 @@
-"""Database.
+"""Contains database instance with application schema."""
 
-Contains database instance used for connections.
-"""
+import sys
 
 import sqlalchemy as sql
 
@@ -9,7 +8,7 @@ from .config import config
 
 
 class Database():
-    """Class represent database."""
+    """Represent database with application schema."""
 
     ckwargs = {'literal_binds': True}
 
@@ -18,16 +17,23 @@ class Database():
             vendor = config['DATABASE']['vendor']
             host = config['DATABASE']['host']
             port = config['DATABASE']['port']
+            path = config['DATABASE'].get('path')
             sid = config['DATABASE'].get('sid')
             service = config['DATABASE'].get('service')
             user = config['DATABASE']['user']
             password = config['DATABASE']['password']
-            string = f'{vendor}://{user}:{password}@{host}:{port}'
-            if sid is not None:
-                string += f'/{sid}'
-            elif service is not None:
-                string += f'/?service_name={service}'
-            self.engine = sql.create_engine(string)
+            if vendor == 'sqlite' and path is not None:
+                if sys.platform.startswith('win'):
+                    url = f'{vendor}:///{path}'
+                else:
+                    url = f'{vendor}:////{path}'
+            else:
+                url = f'{vendor}://{user}:{password}@{host}:{port}'
+                if sid is not None:
+                    url += f'/{sid}'
+                elif service is not None:
+                    url += f'/?service_name={service}'
+            self.engine = sql.create_engine(url)
         pass
 
     def connect(self):
@@ -51,5 +57,6 @@ class Database():
         """
         meta = sql.MetaData()
         return sql.Table(name, meta, autoload=True, autoload_with=db.engine)
+
 
 db = Database()

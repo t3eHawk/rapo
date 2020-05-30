@@ -1,10 +1,10 @@
-"""Contains application utilitis."""
+"""Contains application utils."""
 
 import datetime as dt
 
 
 class Utils():
-    """Reflects application utilitis."""
+    """Represents application utils."""
 
     def to_date(self, input):
         """Normalize input value to datetime object.

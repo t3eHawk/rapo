@@ -1,3 +1,5 @@
+"""Contains application logger."""
+
 import pepperoni
 
 from .config import config

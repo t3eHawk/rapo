@@ -10,7 +10,7 @@ from .utils import utils
 
 
 class Parser():
-    """Reflects application parser.
+    """Represents application parser.
 
     Parser used to transform input data from RAPO_CONFIG to output
     appropriate for application.

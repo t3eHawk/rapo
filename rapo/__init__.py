@@ -1,7 +1,7 @@
 """Python Revenue Assurance Process Optimizer."""
 
-from .control import Control
-from .scheduler import Scheduler
+from .main.scheduler import Scheduler
+from .main.control import Control
 
 
 __author__ = 'Timur Faradzhov'

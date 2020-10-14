@@ -363,6 +363,8 @@ class Control():
             return []
         elif self.type == 'REC':
             return self.parser.parse_reconciliation_rule_config()
+        elif self.type == 'REP':
+            return []
         pass
 
     @property
@@ -372,6 +374,8 @@ class Control():
             return self.parser.parse_analyze_error_config()
         elif self.type == 'REC':
             return self.parser.parse_reconciliation_error_config()
+        elif self.type == 'REP':
+            return []
         pass
 
     @property
@@ -453,7 +457,7 @@ class Control():
             self.status = 'S'
             self.start_date = dt.datetime.now()
             self._update(status=self.status, start_date=self.start_date)
-            if self.type == 'ANL':
+            if self.type in ('ANL', 'REP'):
                 self.source_table = self.parser.parse_source_table()
             elif self.type == 'REC':
                 self.source_table_a = self.parser.parse_source_table_a()
@@ -534,7 +538,7 @@ class Control():
 
     def _fetch(self):
         logger.info(f'{self} Fetching records...')
-        if self.type == 'ANL':
+        if self.type in ('ANL', 'REP'):
             logger.info(f'{self} Fetching {self.source_name}...')
             self.input_table = self.executor.fetch_records()
             self.fetched = self.executor.count_fetched()
@@ -595,6 +599,9 @@ class Control():
                 self._update(errors=self.errors,
                              success=self.success,
                              error_level=self.error_level)
+        elif self.type == 'REP':
+            if self.fetched or 0 > 0:
+                self.error_table = self.executor.analyze()
         elif self.type == 'REC' and self.subtype == 'MA':
             threads = []
             current = th.current_thread()
@@ -643,6 +650,9 @@ class Control():
         logger.info(f'{self} Saving results...')
         if self.type == 'ANL':
             if self.errors or 0 > 0:
+                self.executor.save_errors()
+        elif self.type == 'REP':
+            if self.fetched or 0 > 0:
                 self.executor.save_errors()
         elif self.type == 'REC':
             if self.type == 'MA':

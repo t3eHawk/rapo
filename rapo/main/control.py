@@ -427,6 +427,19 @@ class Control():
                             self._hook()
         pass
 
+    def revoke(self):
+        """Revoke control results."""
+        try:
+            logger.info(f'{self} Revoking results...')
+            self.status = 'X'
+            self._update(status=self.status)
+            self.executor.delete_results()
+        except Exception:
+            logger.error()
+        else:
+            logger.info(f'{self} Results revoked')
+        pass
+
     def _initiate(self):
         logger.info(f'{self} Initiating control...')
         try:
@@ -1330,6 +1343,17 @@ class Executor():
     def save_mismatches(self):
         """Save found mismatches as RAPO results."""
         return self.save_errors()
+
+    def delete_results(self):
+        """Delete records saved as control results in DB table."""
+        conn = db.connect()
+        table_names = reader.read_result_table_names(self.control.name)
+        for table_name in table_names:
+            table = db.table(table_name)
+            id = table.c.rapo_process_id
+            delete = table.delete().where(id == self.control.process_id)
+            conn.execute(delete)
+        pass
 
     def prepare_output_table(self):
         """Check RAPO_RESULT and create it at initial control run.

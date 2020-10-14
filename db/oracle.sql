@@ -32,10 +32,10 @@ insert into rapo_ref_engines values ('PY', 'Python');
 commit;
 
 create table rapo_config (
-  control_id          number,
+  control_id          number(*, 0),
   -- Alternative CONTROL_ID for Oracle >= 12. Use if you are not happy with
   -- ordinary sequence-trigger pair.
-  -- control_id          number generated always as identity start with 1 increment by 1 nocache,
+  -- control_id          number(*, 0) generated always as identity start with 1 increment by 1 nocache,
   control_name        varchar2(20) not null,
   control_desc        varchar2(300),
   control_alias       varchar2(60),
@@ -58,8 +58,8 @@ create table rapo_config (
   need_a              varchar2(1),
   need_b              varchar2(1),
   schedule            varchar2(300) not null,
-  days_back           number default 1 not null,
-  days_retention      number default 365 not null,
+  days_back           number(*, 0) default 1 not null,
+  days_retention      number(*, 0) default 365 not null,
   need_hook           varchar2(1) default 'Y' not null,
   status              varchar2(1) default 'N' not null,
   created_date        date default sysdate not null,
@@ -189,10 +189,10 @@ end;
 /
 
 create table rapo_log (
-  process_id    number,
+  process_id    number(*, 0),
   -- Same as for CONTROL_ID above.
-  -- process_id    number generated always as identity start with 1000000001 increment by 1 maxvalue 2000000000 nocache,
-  control_id    number,
+  -- process_id    number(*, 0) generated always as identity start with 1000000001 increment by 1 maxvalue 2000000000 nocache,
+  control_id    number(*, 0),
   added         date,
   updated       date,
   start_date    date,
@@ -200,16 +200,16 @@ create table rapo_log (
   status        varchar2(1),
   date_from     date,
   date_to       date,
-  fetched       number,
-  success       number,
-  errors        number,
+  fetched       number(*, 0),
+  success       number(*, 0),
+  errors        number(*, 0),
   error_level   float,
-  fetched_a     number,
-  fetched_b     number,
-  success_a     number,
-  success_b     number,
-  errors_a      number,
-  errors_b      number,
+  fetched_a     number(*, 0),
+  fetched_b     number(*, 0),
+  success_a     number(*, 0),
+  success_b     number(*, 0),
+  errors_a      number(*, 0),
+  errors_b      number(*, 0),
   error_level_a float,
   error_level_b float,
   text_log      clob,
@@ -242,12 +242,12 @@ end;
 /
 
 create table rapo_scheduler (
-  id         number,
+  id         number(*, 0),
   -- Same as for CONTROL_ID above.
-  -- id         number generated always as identity start with 1 increment by 1 nocache,
+  -- id         number(*, 0) generated always as identity start with 1 increment by 1 nocache,
   server     varchar2(30) not null,
   username   varchar2(30) not null,
-  pid        number not null,
+  pid        number(*, 0) not null,
   start_date date not null,
   stop_date  date,
   status     varchar2(1) not null,

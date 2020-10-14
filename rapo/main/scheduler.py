@@ -1,4 +1,4 @@
-"""Contains application scheduler."""
+"""Contains RAPO scheduler interface."""
 
 import argparse
 import datetime as dt
@@ -13,10 +13,10 @@ import threading as th
 import time
 import queue
 
-from .logger import logger
-from .database import db
+from ..database import db
+from ..logger import logger
 
-from .control import Control
+from ..main.control import Control
 
 
 class Scheduler():
@@ -325,7 +325,7 @@ class Scheduler():
                 name, moment = self.queue.get()
                 logger.info(f'Initiating control {name}[{moment}]...')
                 try:
-                    control = Control(name, _trigger=moment)
+                    control = Control(name, timestamp=moment)
                     control.run()
                 except Exception:
                     logger.error()

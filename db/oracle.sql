@@ -13,13 +13,13 @@ insert into rapo_ref_types values ('REC', 'Reconciliation');
 insert into rapo_ref_types values ('KPI', 'Key Performance Indicator');
 commit;
 
-create table rapo_ref_methods (
-  method_code varchar2(3) not null,
-  method_desc varchar2(30) not null,
-  constraint rapo_ref_methods_pk primary key (method_code)
+create table rapo_ref_subtypes (
+  type_code    varchar2(3) not null,
+  subtype_code varchar2(3) not null,
+  subtype_desc varchar2(30) not null,
+  constraint rapo_ref_subtypes_pk primary key (type_code, subtype_code)
 );
-insert into rapo_ref_methods values ('MA', 'Matching');
-insert into rapo_ref_methods values ('MI', 'Missing');
+insert into rapo_ref_subtypes values ('REC', 'MA', 'Matching');
 commit;
 
 create table rapo_ref_engines (
@@ -41,7 +41,7 @@ create table rapo_config (
   control_alias       varchar2(60),
   control_group       varchar2(60),
   control_type        varchar2(30) not null,
-  control_method      varchar2(30),
+  control_subtype     varchar2(30),
   control_engine      varchar2(30) not null,
   source_name         varchar2(30),
   source_date_field   varchar2(30),
@@ -52,8 +52,7 @@ create table rapo_config (
   source_name_b       varchar2(30),
   source_date_field_b varchar2(30),
   output_table_b      varchar2(4000),
-  match_config        varchar2(4000),
-  mismatch_config     varchar2(4000),
+  rule_config         varchar2(4000),
   error_config        varchar2(4000),
   need_a              varchar2(1),
   need_b              varchar2(1),
@@ -68,9 +67,9 @@ create table rapo_config (
   constraint rapo_config_type_fk
     foreign key (control_type)
     references rapo_ref_types(type_code),
-  constraint rapo_config_method_fk
-    foreign key (control_method)
-    references rapo_ref_methods(method_code),
+  constraint rapo_config_subtype_fk
+    foreign key (control_type, control_subtype)
+    references rapo_ref_subtypes(type_code, subtype_code),
   constraint rapo_config_engine_fk
     foreign key (control_engine)
     references rapo_ref_engines(engine_code)
@@ -117,7 +116,7 @@ begin
       :new.control_alias,
       :new.control_group,
       :new.control_type,
-      :new.control_method,
+      :new.control_subtype,
       :new.control_engine,
       :new.source_name,
       :new.source_date_field,
@@ -128,8 +127,7 @@ begin
       :new.source_name_b,
       :new.source_date_field_b,
       :new.output_table_b,
-      :new.match_config,
-      :new.mismatch_config,
+      :new.rule_config,
       :new.error_config,
       :new.need_a,
       :new.need_b,
@@ -157,7 +155,7 @@ begin
         :old.control_alias,
         :old.control_group,
         :old.control_type,
-        :old.control_method,
+        :old.control_subtype,
         :old.control_engine,
         :old.source_name,
         :old.source_date_field,
@@ -168,8 +166,7 @@ begin
         :old.source_name_b,
         :old.source_date_field_b,
         :old.output_table_b,
-        :old.match_config,
-        :old.mismatch_config,
+        :old.rule_config,
         :old.error_config,
         :old.need_a,
         :old.need_b,

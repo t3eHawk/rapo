@@ -13,8 +13,11 @@ import threading as th
 import time
 import queue
 
+import psutil
+
 from ..database import db
 from ..logger import logger
+from ..reader import reader
 
 from ..main.control import Control
 
@@ -61,54 +64,51 @@ class Scheduler():
     """
 
     def __init__(self):
+        self.schedule = None
         self.moment = None
         self.delay = None
-        self.schedule = None
         self.queue = queue.Queue()
         self.executors = []
-        for i in range(5):
-            thread = th.Thread(name=f'Thread-Executor-{i}',
-                               target=self._execute, daemon=True)
-            thread.start()
-            self.executors.append(thread)
 
-        self.server = None
-        self.username = None
-        self.pid = None
-        self.start_date = None
-        self.stop_date = None
-        self.status = None
-
-        argv = [arg for arg in sys.argv if arg.startswith('-') is False]
-        count = len(argv)
-        if count > 1:
-            act = argv[1]
-            if act == 'start':
-                exe = sys.executable
-                file = os.path.abspath(argv[0])
-                args = '--start'
-                kwargs = {}
-                kwargs['stdout'] = sp.DEVNULL
-                kwargs['stderr'] = sp.DEVNULL
-                if sys.platform.startswith('win') is True:
-                    kwargs['creationflags'] = sp.CREATE_NO_WINDOW
-                command = [exe, file, args]
-                sp.Popen(command, **kwargs)
-            elif act == 'stop':
-                self._stop()
+        self.table = db.tables.scheduler
+        self.record = reader.read_scheduler_record()
+        if self.record and self.record['status'] == 'Y':
+            self.server = self.record['server']
+            self.username = self.record['username']
+            self.pid = int(self.record['pid'])
+            self.start_date = self.record['start_date']
+            self.stop_date = self.record['stop_date']
+            self.status = True if self.record['status'] == 'Y' else False
         else:
-            parser = argparse.ArgumentParser()
-            parser.add_argument('--start',
-                                action='store_true',
-                                required=False)
-            parser.add_argument('--stop',
-                                action='store_true',
-                                required=False)
-            args, anons = parser.parse_known_args()
+            self.server = platform.node()
+            self.username = os.getlogin()
+            self.pid = os.getpid()
+            self.start_date = None
+            self.stop_date = None
+            self.status = False
+
+        argv = self._parse_console_arguments()
+        if argv:
+            action = argv[0]
+            if action == 'start':
+                self.start()
+            elif action == 'stop':
+                self.stop()
+        else:
+            args = self._parse_arguments()
             if args.start is True:
                 self._start()
             elif args.stop is True:
                 self._stop()
+        pass
+
+    @property
+    def running(self):
+        """Check whether scheduler is running."""
+        if self.status is True and self.pid and psutil.pid_exists(self.pid):
+            return True
+        else:
+            return False
         pass
 
     def start(self):
@@ -119,8 +119,7 @@ class Scheduler():
         RAPO_SCHEDULER will be updated with information about current scheduler
         process including server, username, PID, start date and status.
         """
-        self.__start()
-        pass
+        return self._create()
 
     def stop(self):
         """Stop running scheduler.
@@ -128,87 +127,113 @@ class Scheduler():
         Process will be stopped.
         RAPO_SCHEDULER will be updated with stop date and status.
         """
-        self._stop()
-        pass
+        return self._destroy()
+
+    def read(self):
+        """Parse schedule from database table into appropriate structure."""
+        return dict(self._sked())
 
     def _start(self):
-        try:
-            self.__start()
-        except Exception:
-            logger.error()
-        pass
-
-    def __start(self):
-        signal.signal(signal.SIGINT, self._exit)
-        signal.signal(signal.SIGTERM, self._exit)
+        if self.running:
+            message = f'scheduler already running at PID {self.pid}'
+            raise Exception(message)
         logger.info('Starting scheduler...')
-        self.schedule = dict(self._sked())
-        if self.schedule:
-            logger.debug(f'Schedule: {self.schedule}')
-        else:
-            logger.debug('Schedule is empty')
-        self.server = platform.node()
-        self.username = os.getlogin()
-        self.pid = os.getpid()
         self.start_date = dt.datetime.now()
-        self.status = 'W'
-        conn = db.connect()
-        table = db.table('rapo_scheduler')
-        select = table.select()
-        result = conn.execute(select).first()
-        if result is not None and result.stop_date is None:
-            pid = int(result.pid)
-            raise AttributeError(f'Scheduler already running at PID {pid}')
-        delete = table.delete()
-        conn.execute(delete)
-        insert = table.insert().values(server=self.server,
-                                       username=self.username,
-                                       pid=self.pid,
-                                       start_date=self.start_date,
-                                       status=self.status)
-        result = conn.execute(insert)
-        pk = int(result.inserted_primary_key[0])
-        logger.debug(f'Scheduler owns id {pk}')
+        self.status = True
+        self._start_signal_handlers()
+        self._start_executors()
+        self._enable()
         logger.info(f'Scheduler started at PID {self.pid}')
-        self._run()
-        pass
-
-    def _stop(self):
-        self.__stop()
-        self._kill()
-        pass
-
-    def __stop(self):
-        conn = db.connect()
-        table = db.table('rapo_scheduler')
-        select = table.select()
-        result = conn.execute(select).first()
-        self.pid = int(result.pid)
-        self.stop_date = dt.datetime.now()
-        self.status = 'S'
-        update = table.update().values(stop_date=self.stop_date,
-                                       status=self.status)
-        conn.execute(update)
-        pass
-
-    def _kill(self):
-        try:
-            os.kill(self.pid, signal.SIGTERM)
-        except OSError:
-            raise Warning(f'Scheduler at PID {self.pid} was not found')
-        pass
-
-    def _exit(self, signum, frame):
-        logger.info('Stopping scheduler...')
-        self.__stop()
-        logger.info(f'Scheduler at PID {self.pid} stopped')
-        self._kill()
-        pass
+        return self._run()
 
     def _run(self):
         self._synchronize()
         while True:
             self._process()
+        pass
+
+    def _stop(self):
+        if self.status is True:
+            logger.info('Stopping scheduler...')
+            self.stop_date = dt.datetime.now()
+            self.status = False
+            self._disable()
+            logger.info(f'Scheduler at PID {self.pid} stopped')
+            return self._exit()
+        pass
+
+    def _create(self):
+        exe = sys.executable
+        file = os.path.abspath(sys.argv[0])
+        args = '--start'
+        settings = {}
+        settings['stdout'] = sp.DEVNULL
+        settings['stderr'] = sp.DEVNULL
+        if sys.platform.startswith('win') is True:
+            settings['creationflags'] = sp.CREATE_NO_WINDOW
+        command = [exe, file, args]
+        proc = sp.Popen(command, **settings)
+        return proc
+
+    def _destroy(self):
+        if self.status is True:
+            self.stop_date = dt.datetime.now()
+            self.status = False
+            self._disable()
+            return self._terminate()
+        pass
+
+    def _enable(self):
+        conn = db.connect()
+        update = self.table.update().values(server=self.server,
+                                            username=self.username,
+                                            pid=self.pid,
+                                            start_date=self.start_date,
+                                            stop_date=self.stop_date,
+                                            status='Y')
+        conn.execute(update)
+        pass
+
+    def _disable(self):
+        conn = db.connect()
+        update = self.table.update().values(stop_date=self.stop_date,
+                                            status='N')
+        conn.execute(update)
+        pass
+
+    def _exit(self):
+        return sys.exit()
+
+    def _terminate(self):
+        try:
+            os.kill(self.pid, signal.SIGTERM)
+        except OSError:
+            message = f'scheduler at PID {self.pid} was not found'
+            raise Warning(message)
+        pass
+
+    def _parse_console_arguments(self):
+        return [arg for arg in sys.argv[1:] if arg.startswith('-') is False]
+
+    def _parse_arguments(self):
+        parser = argparse.ArgumentParser()
+        parser.add_argument('--start', action='store_true', required=False)
+        parser.add_argument('--stop', action='store_true', required=False)
+        args, anons = parser.parse_known_args()
+        return args
+
+    def _start_signal_handlers(self):
+        signal.signal(signal.SIGINT, lambda signum, frame: self._stop())
+        signal.signal(signal.SIGTERM, lambda signum, frame: self._stop())
+        pass
+
+    def _start_executors(self):
+        for i in range(5):
+            name = f'Thread-Executor-{i}'
+            target = self._execute
+            thread = th.Thread(name=name, target=target, daemon=True)
+            thread.start()
+            self.executors.append(thread)
         pass
 
     def _synchronize(self):
@@ -222,8 +247,14 @@ class Scheduler():
         pass
 
     def _process(self):
+        self._read()
+        self._walk()
+        self._next()
+        pass
+
+    def _read(self):
         try:
-            if int(self.moment) % 300 == 0:
+            if self.schedule is None or int(self.moment) % 300 == 0:
                 self.schedule = dict(self._sked())
                 if self.schedule:
                     logger.debug(f'Schedule: {self.schedule}')
@@ -231,18 +262,26 @@ class Scheduler():
                     logger.debug('Schedule is empty')
         except Exception:
             logger.error()
+        pass
+
+    def _walk(self):
         now = time.localtime(self.moment)
-        for name, params in self.schedule.items():
+        for name, record in self.schedule.items():
             try:
-                if (params['status'] is True and
-                    self._check(params['mday'], now.tm_mday) is True and
-                    self._check(params['wday'], now.tm_wday+1) is True and
-                    self._check(params['hour'], now.tm_hour) is True and
-                    self._check(params['min'], now.tm_min) is True and
-                    self._check(params['sec'], now.tm_sec) is True):
+                if (
+                    record['status'] is True
+                    and self._check(record['mday'], now.tm_mday) is True
+                    and self._check(record['wday'], now.tm_wday+1) is True
+                    and self._check(record['hour'], now.tm_hour) is True
+                    and self._check(record['min'], now.tm_min) is True
+                    and self._check(record['sec'], now.tm_sec) is True
+                ):
                     self._register(name, self.moment)
             except Exception:
                 logger.error()
+        pass
+
+    def _next(self):
         delay = time.time()-self.moment
         wait = 1-delay
         try:
@@ -258,29 +297,23 @@ class Scheduler():
     def _sked(self):
         logger.debug('Getting schedule...')
         conn = db.connect()
-        table = db.table('rapo_config')
+        table = db.tables.config
         select = table.select()
         result = conn.execute(select)
         for row in result:
             try:
                 name = row.control_name
                 status = True if row.status == 'Y' else False
-                schedule = row.schedule
-                schedule = {} if schedule is None else json.loads(schedule)
-                mday = schedule.get('mday')
-                wday = schedule.get('wday')
-                hour = schedule.get('hour')
-                min = schedule.get('min')
-                sec = schedule.get('sec')
+                schedule = {} if not row.schedule else json.loads(row.schedule)
+                record = {k: v for k, v in schedule.items()
+                          if k in ['mday', 'wday', 'hour', 'min', 'sec']}
+                record['status'] = status
             except Exception:
                 logger.warning()
                 continue
             else:
-                yield name, {'status': status, 'mday': mday, 'wday': wday,
-                             'hour': hour, 'min': min, 'sec': sec}
+                yield name, record
         logger.debug('Schedule retrieved')
-
-    def _match(self):
         pass
 
     def _check(self, unit, now):
@@ -308,6 +341,7 @@ class Scheduler():
         # All other cases is not for the now.
         else:
             return False
+        pass
 
     def _register(self, name, moment):
         try:
@@ -334,3 +368,5 @@ class Scheduler():
                     logger.info(f'Control {name}[{moment}] performed')
             time.sleep(1)
         pass
+
+    pass

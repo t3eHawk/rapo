@@ -240,37 +240,18 @@ end;
 /
 
 create table rapo_scheduler (
-  id         number(*, 0),
-  -- Same as for CONTROL_ID above.
-  -- id         number(*, 0) generated always as identity start with 1 increment by 1 nocache,
-  server     varchar2(30) not null,
-  username   varchar2(30) not null,
-  pid        number(*, 0) not null,
-  start_date date not null,
+  id         varchar2(15 char) not null,
+  server     varchar2(30),
+  username   varchar2(30),
+  pid        number(*, 0),
+  start_date date,
   stop_date  date,
   status     varchar2(1) not null,
   constraint rapo_scheduler_pk primary key (id)
 );
+insert into rapo_scheduler (id, status) values ('RAPO.SCHEDULER', 'N');
+commit;
 
--- Same as for CONTROL_ID above.
-create sequence rapo_scheduler_seq
-increment by 1
-start with 1
-nocache;
-
--- Same as for CONTROL_ID above.
-create or replace trigger rapo_scheduler_id_trg
-before insert on rapo_scheduler
-for each row
-begin
-  select rapo_scheduler_seq.nextval
-    into :new.id
-    from dual;
-end;
-/
-
-create table rapo_web (
-  id         char(12 char) not null,
 create table rapo_web_api (
   id         varchar2(15 char) not null,
   server     varchar2(30 char),

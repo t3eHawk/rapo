@@ -12,8 +12,19 @@ class Reader():
     """
 
     def read_scheduler_record(self):
-        """."""
-        pass
+        """Get scheduler record from DB table.
+
+        Returns
+        -------
+        record : dict
+            Ordinary dictionary with web API information from DB table.
+        """
+        conn = db.connect()
+        table = db.tables.scheduler
+        select = table.select()
+        result = conn.execute(select).first()
+        record = dict(result)
+        return record
 
     def read_web_api_record(self):
         """Get web API record from DB table.

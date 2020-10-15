@@ -269,6 +269,22 @@ begin
 end;
 /
 
+create table rapo_web (
+  id         char(12 char) not null,
+create table rapo_web_api (
+  id         varchar2(15 char) not null,
+  server     varchar2(30 char),
+  username   varchar2(30 char),
+  pid        number(*, 0),
+  url        varchar2(30 char),
+  debug      char(1 char),
+  start_date date,
+  stop_date  date,
+  status     varchar2(1) not null
+);
+insert into rapo_web_api (id, status) values ('RAPO.WEB.API', 'N');
+commit;
+
 create or replace procedure rapo_control_hook (
   in_process_id number
 )

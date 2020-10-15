@@ -2,6 +2,7 @@
 
 from .main.scheduler import Scheduler
 from .main.control import Control
+from .web import WEBAPI
 
 
 __author__ = 'Timur Faradzhov'
@@ -14,4 +15,4 @@ __maintainer__ = 'Timur Faradzhov'
 __email__ = 'timurfaradzhov@gmail.com'
 __status__ = 'Development'
 
-__all__ = [Control, Scheduler]
+__all__ = [Scheduler, Control, WEBAPI]

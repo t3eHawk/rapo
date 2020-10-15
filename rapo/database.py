@@ -45,6 +45,7 @@ class Database():
             self.config = self.load('rapo_config')
             self.log = self.load('rapo_log')
             self.scheduler = self.load('rapo_scheduler')
+            self.web_api = self.load('rapo_web_api')
             pass
 
         def load(self, name):

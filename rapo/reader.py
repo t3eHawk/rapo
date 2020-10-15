@@ -15,6 +15,21 @@ class Reader():
         """."""
         pass
 
+    def read_web_api_record(self):
+        """Get web API record from DB table.
+
+        Returns
+        -------
+        record : dict
+            Ordinary dictionary with web API information from DB table.
+        """
+        conn = db.connect()
+        table = db.tables.web_api
+        select = table.select()
+        result = conn.execute(select).first()
+        record = dict(result)
+        return record
+
     def read_running_controls(self):
         """Get list of running controls."""
         conn = db.connect()

@@ -680,7 +680,7 @@ class Control():
             if self.fetched or 0 > 0:
                 self.executor.save_errors()
         elif self.type == 'REC':
-            if self.type == 'MA':
+            if self.subtype == 'MA':
                 if self.errors or 0 > 0:
                     self.executor.save_mismatches()
         logger.info(f'{self} Results saved')
@@ -1415,7 +1415,7 @@ class Executor():
         return mismatched
 
     def save_results(self):
-        """Save found RAPO results."""
+        """Save defined results as output records."""
         logger.debug(f'{self.c} Start saving...')
         conn = db.connect()
         table = self.control.result_table
@@ -1429,7 +1429,7 @@ class Executor():
         pass
 
     def save_errors(self):
-        """Save found discrepancies as RAPO results."""
+        """Save defined errors as output records."""
         logger.debug(f'{self.c} Start saving...')
         conn = db.connect()
         table = self.control.error_table

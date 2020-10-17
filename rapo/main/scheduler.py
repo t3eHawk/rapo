@@ -226,25 +226,32 @@ class Scheduler():
         return args
 
     def _start_signal_handlers(self):
+        logger.debug('Starting signal handlers...')
         signal.signal(signal.SIGINT, lambda signum, frame: self._stop())
         signal.signal(signal.SIGTERM, lambda signum, frame: self._stop())
+        logger.debug('Signal handlers started')
         pass
 
     def _start_executors(self):
+        logger.debug('Starting executors...')
         for i in range(5):
             name = f'Thread-Executor-{i}'
             target = self._execute
             thread = th.Thread(name=name, target=target, daemon=True)
             thread.start()
             self.executors.append(thread)
+            logger.debug(f'Executor {i} started as {thread.name}')
+        logger.debug('All executors started')
         pass
 
     def _start_maintainer(self):
+        logger.debug('Starting maintainer...')
         name = 'Thread-Maintainer'
         target = self._maintain
         thread = th.Thread(name=name, target=target, daemon=True)
         thread.start()
         self.maintainer = thread
+        logger.debug(f'Maintainer started as {thread.name}...')
         pass
 
     def _synchronize(self):

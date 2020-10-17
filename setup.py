@@ -14,7 +14,7 @@ long_description_content_type = 'text/markdown'
 license = rapo.__license__
 url = 'https://github.com/t3eHawk/rapo'
 install_requires = ['pepperoni', 'psutil',
-                    'sqlalchemy', 'cx_oracle',
+                    'sqlalchemy', 'cx_oracle', 'sqlparse',
                     'flask', 'flask_httpauth', 'waitress']
 packages = setuptools.find_packages()
 classifiers = ['Programming Language :: Python :: 3',

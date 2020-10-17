@@ -331,9 +331,12 @@ class Control():
     def status(self, value):
         """Set control run status."""
         if isinstance(value, str) and len(value) == 1:
-            self._status = value
-            self.updated = dt.datetime.now()
-            logger.info(f'{self} Status changed to {self._status}')
+            if hasattr(self, '_status'):
+                self._status = value
+                self.updated = dt.datetime.now()
+                logger.info(f'{self} Status changed to {self._status}')
+            else:
+                self._status = value
         elif value is None:
             self._status = None
         else:
@@ -715,6 +718,9 @@ class Control():
                     logger.info(f'{repr} Deleting results in {table}...')
                     id = table.c.rapo_process_id
                     query = table.delete().where(id == process_id)
+                    text = db.formatter(query)
+                    logger.debug(f'{self} Deleting from {table} '
+                                 f'with query:\n{text}')
                     conn.execute(query)
                     logger.info(f'{repr} Results in {table} deleted')
             logger.info(f'{self} Control results cleaned')
@@ -1051,7 +1057,7 @@ class Parser():
         logger.debug(f'{self.c} Parsing output columns...')
         config = json.loads(config) if isinstance(config, str) else None
         if config is None:
-            logger.debug(f'{self.c} No output was configured')
+            logger.debug(f'{self.c} Output was not configured')
             return None
         else:
             column = dict.fromkeys(['column', 'column_a', 'column_b'])
@@ -1070,7 +1076,7 @@ class Parser():
                 logger.debug(f'{self.c} Output columns parsed')
                 return columns
             else:
-                logger.debug(f'{self.c} No output columns was configured')
+                logger.debug(f'{self.c} Output columns was not configured')
                 return None
         pass
 
@@ -1088,6 +1094,9 @@ class Parser():
                            .where(log.c.added < date)
                            .where(log.c.process_id.in_(subq))
                            .order_by(log.c.process_id))
+            text = db.formatter(query)
+            logger.debug(f'{self.c} Searching outdated results in {table} '
+                         f'with query:\n{text}')
             result = conn.execute(query)
             pids = [row[0] for row in result]
             logger.debug(f'{self.c} Outdated results in {table}: {pids}')
@@ -1203,8 +1212,9 @@ class Executor():
 
         tablename = f'rapo_temp_err_{self.control.process_id}'
         select = select.compile(bind=db.engine, compile_kwargs=db.ckwargs)
-        ctas = sa.text(f'CREATE TABLE {tablename} AS \n{select}')
-        logger.info(f'{self.c} Creating {tablename} with query \n{ctas}')
+        ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
+        text = db.formatter(ctas)
+        logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
         conn.execute(ctas)
         logger.debug(f'{self.c} {tablename} created')
 
@@ -1268,8 +1278,9 @@ class Executor():
 
         tablename = f'rapo_temp_md_{self.control.process_id}'
         select = select.compile(bind=db.engine, compile_kwargs=db.ckwargs)
-        ctas = sa.text(f'CREATE TABLE {tablename} AS \n{select}')
-        logger.info(f'{self.c} Creating {tablename} with query \n{ctas}')
+        ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
+        text = db.formatter(ctas)
+        logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
         conn.execute(ctas)
         logger.debug(f'{self.c} {tablename} created')
 
@@ -1333,8 +1344,9 @@ class Executor():
 
         tablename = f'rapo_temp_nmd_{self.control.process_id}'
         select = select.compile(bind=db.engine, compile_kwargs=db.ckwargs)
-        ctas = sa.text(f'CREATE TABLE {tablename} AS \n{select}')
-        logger.info(f'{self.c} Creating {tablename} with query \n{ctas}')
+        ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
+        text = db.formatter(ctas)
+        logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
         conn.execute(ctas)
         logger.debug(f'{self.c} {tablename} created')
 
@@ -1508,13 +1520,14 @@ class Executor():
             select = sa.select(columns)
             select = select.where(sa.literal(1) == sa.literal(0))
             select = select.compile(bind=db.engine, compile_kwargs=db.ckwargs)
-            ctas = f'CREATE TABLE {tablename} AS \n{select}'
+            ctas = f'CREATE TABLE {tablename} AS\n{select}'
             index = (f'CREATE INDEX {tablename}_rapo_process_id_ix '
                      f'ON {tablename}(rapo_process_id) COMPRESS')
             compress = (f'ALTER TABLE {tablename} '
                         'MOVE ROW STORE COMPRESS ADVANCED')
+            text = db.formatter(ctas, index, compress)
             logger.debug(f'{self.c} Creating table {tablename} '
-                         f'with query \n{ctas};\n{index};\n{compress};')
+                         f'with query:\n{text}')
             conn.execute(ctas)
             conn.execute(index)
             conn.execute(compress)
@@ -1548,8 +1561,9 @@ class Executor():
         logger.debug(f'{self.c} Start fetching...')
         conn = db.connect()
         select = select.compile(bind=db.engine, compile_kwargs=db.ckwargs)
-        ctas = sa.text(f'CREATE TABLE {tablename} AS \n{select}')
-        logger.info(f'{self.c} Creating {tablename} with query \n{ctas}')
+        ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
+        text = db.formatter(ctas)
+        logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
         conn.execute(ctas)
         logger.info(f'{self.c} {tablename} created')
         table = db.table(tablename)

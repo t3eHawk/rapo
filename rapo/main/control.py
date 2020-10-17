@@ -357,6 +357,16 @@ class Control():
         return self.parser.parse_select_b()
 
     @property
+    def output_names(self):
+        """Get output table names."""
+        return self.parser.parse_output_names()
+
+    @property
+    def output_tables(self):
+        """Get output table objects."""
+        return self.parser.parse_output_tables()
+
+    @property
     def rule_config(self):
         """Get control match configuration."""
         if self.type == 'ANL':
@@ -427,17 +437,19 @@ class Control():
                             self._hook()
         pass
 
+    def delete(self):
+        """Delete control results."""
+        self._delete()
+        pass
+
     def revoke(self):
         """Revoke control results."""
-        try:
-            logger.info(f'{self} Revoking results...')
-            self.status = 'X'
-            self._update(status=self.status)
-            self.executor.delete_results()
-        except Exception:
-            logger.error()
-        else:
-            logger.info(f'{self} Results revoked')
+        self._revoke()
+        pass
+
+    def clean(self):
+        """Clean control results."""
+        self._clean()
         pass
 
     def _initiate(self):
@@ -674,6 +686,42 @@ class Control():
         logger.info(f'{self} Results saved')
         pass
 
+    def _delete(self):
+        logger.info(f'{self} Deleting results...')
+        self.executor.delete_output_records()
+        logger.info(f'{self} Results deleted')
+        pass
+
+    def _revoke(self):
+        try:
+            logger.info(f'{self} Revoking control...')
+            self.status = 'X'
+            self._update(status=self.status)
+            self._delete()
+        except Exception:
+            logger.error()
+        else:
+            logger.info(f'{self} Control revoked')
+        pass
+
+    def _clean(self):
+        logger.info(f'{self} Cleaning control results...')
+        conn = db.connect()
+        outdated_results = list(self.parser.parse_outdated_results())
+        if outdated_results:
+            for table, process_ids in outdated_results:
+                for process_id in process_ids:
+                    repr = f'[{self.name}:{process_id}]'
+                    logger.info(f'{repr} Deleting results in {table}...')
+                    id = table.c.rapo_process_id
+                    query = table.delete().where(id == process_id)
+                    conn.execute(query)
+                    logger.info(f'{repr} Results in {table} deleted')
+            logger.info(f'{self} Control results cleaned')
+        else:
+            logger.info(f'{self} No control results to clean')
+        pass
+
     def _update(self, **kwargs):
         logger.debug(f'{self} Updating {db.tables.log} with {kwargs}')
         conn = db.connect()
@@ -850,6 +898,42 @@ class Parser():
             logger.debug(f'{self.c} {table} select parsed')
         return select
 
+    def parse_output_names(self):
+        """Get list with necessary output table names.
+
+        Returns
+        -------
+        names : list
+            List necessary output names.
+        """
+        names = []
+        if (
+            self.control.type == 'ANL'
+            or (
+                self.control.type == 'REC'
+                and self.control.subtype == 'MA'
+            )
+            or self.control.type == 'REP'
+        ):
+            name = f'rapo_rest_{self.control.name}'.lower()
+            names.append(name)
+        return names
+
+    def parse_output_tables(self):
+        """Get list with existing output table objects.
+
+        Returns
+        -------
+        tables : list
+            List of sqlalchemy.Table objects.
+        """
+        tables = []
+        for name in self.control.output_names:
+            if db.engine.has_table(name):
+                table = db.table(name)
+                tables.append(table)
+        return tables
+
     def parse_analyze_error_config(self):
         """Get analyze error configuration.
 
@@ -988,6 +1072,28 @@ class Parser():
             else:
                 logger.debug(f'{self.c} No output columns was configured')
                 return None
+        pass
+
+    def parse_outdated_results(self):
+        """Create list with tables and IDs of outdated control results."""
+        conn = db.connect()
+        log = db.tables.log
+        control_id = self.control.id
+        days_retention = self.control.config['days_retention']
+        for table in self.parse_output_tables():
+            select = sa.select([log.c.process_id])
+            date = sa.func.trunc(sa.func.sysdate())-days_retention
+            subq = sa.select([table.c.rapo_process_id])
+            query = (select.where(log.c.control_id == control_id)
+                           .where(log.c.added < date)
+                           .where(log.c.process_id.in_(subq))
+                           .order_by(log.c.process_id))
+            result = conn.execute(query)
+            pids = [row[0] for row in result]
+            logger.debug(f'{self.c} Outdated results in {table}: {pids}')
+            if pids:
+                yield (table, pids)
+        pass
 
     pass
 
@@ -1344,12 +1450,10 @@ class Executor():
         """Save found mismatches as RAPO results."""
         return self.save_errors()
 
-    def delete_results(self):
+    def delete_output_records(self):
         """Delete records saved as control results in DB table."""
         conn = db.connect()
-        table_names = reader.read_result_table_names(self.control.name)
-        for table_name in table_names:
-            table = db.table(table_name)
+        for table in self.control.output_tables:
             id = table.c.rapo_process_id
             delete = table.delete().where(id == self.control.process_id)
             conn.execute(delete)

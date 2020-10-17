@@ -69,6 +69,8 @@ class Scheduler():
         self.delay = None
         self.queue = queue.Queue()
         self.executors = []
+        self.maintenance = th.Event()
+        self.maintainer = None
 
         self.table = db.tables.scheduler
         self.record = reader.read_scheduler_record()
@@ -142,6 +144,7 @@ class Scheduler():
         self.status = True
         self._start_signal_handlers()
         self._start_executors()
+        self._start_maintainer()
         self._enable()
         logger.info(f'Scheduler started at PID {self.pid}')
         return self._run()
@@ -236,6 +239,14 @@ class Scheduler():
             self.executors.append(thread)
         pass
 
+    def _start_maintainer(self):
+        name = 'Thread-Maintainer'
+        target = self._maintain
+        thread = th.Thread(name=name, target=target, daemon=True)
+        thread.start()
+        self.maintainer = thread
+        pass
+
     def _synchronize(self):
         logger.debug('Time will be synchronized')
         self.moment = time.time()
@@ -249,6 +260,7 @@ class Scheduler():
     def _process(self):
         self._read()
         self._walk()
+        self._complete()
         self._next()
         pass
 
@@ -279,6 +291,15 @@ class Scheduler():
                     self._register(name, self.moment)
             except Exception:
                 logger.error()
+        pass
+
+    def _complete(self):
+        try:
+            if int(self.moment) % 86400 == 0:
+                logger.debug('Maintenance triggered')
+                self.maintenance.set()
+        except Exception:
+            logger.error()
         pass
 
     def _next(self):
@@ -367,6 +388,27 @@ class Scheduler():
                     self.queue.task_done()
                     logger.info(f'Control {name}[{moment}] performed')
             time.sleep(1)
+        pass
+
+    def _maintain(self):
+        while True:
+            if self.maintenance.is_set():
+                logger.info('Starting maintenance')
+                self._clean()
+                self.maintenance.clear()
+                logger.info('Maintenance performed')
+                break
+            time.sleep(1)
+        pass
+
+    def _clean(self):
+        conn = db.connect()
+        config = db.tables.config
+        select = config.select().order_by(config.c.control_id)
+        result = conn.execute(select)
+        for row in result:
+            control = Control(name=row.control_name)
+            control.clean()
         pass
 
     pass

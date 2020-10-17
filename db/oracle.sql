@@ -34,9 +34,6 @@ commit;
 
 create table rapo_config (
   control_id          number(*, 0),
-  -- Alternative CONTROL_ID for Oracle >= 12. Use if you are not happy with
-  -- ordinary sequence-trigger pair.
-  -- control_id          number(*, 0) generated always as identity start with 1 increment by 1 nocache,
   control_name        varchar2(20) not null,
   control_desc        varchar2(300),
   control_alias       varchar2(60),
@@ -78,13 +75,11 @@ create table rapo_config (
 
 create unique index rapo_config_control_name_ix on rapo_config (control_name);
 
--- You do not need this if you use IDENTITY CONTROL_ID.
 create sequence rapo_config_seq
 increment by 1
 start with 1
 nocache;
 
--- You do not need this if you use IDENTITY CONTROL_ID.
 create or replace trigger rapo_config_id_trg
 before insert on rapo_config
 for each row
@@ -188,8 +183,6 @@ end;
 
 create table rapo_log (
   process_id    number(*, 0),
-  -- Same as for CONTROL_ID above.
-  -- process_id    number(*, 0) generated always as identity start with 1000000001 increment by 1 maxvalue 2000000000 nocache,
   control_id    number(*, 0),
   added         date,
   updated       date,
@@ -220,7 +213,6 @@ create index rapo_log_start_date_ix on rapo_log (start_date);
 create index rapo_log_status_ix on rapo_log (status);
 create index rapo_log_date_from_ix on rapo_log (date_from);
 
--- Same as for CONTROL_ID above.
 create sequence rapo_log_seq
 increment by 1
 start with 1000000001
@@ -228,7 +220,6 @@ maxvalue 2000000000
 minvalue 1000000000
 nocache;
 
--- Same as for CONTROL_ID above.
 create or replace trigger rapo_log_id_trg
 before insert on rapo_log
 for each row

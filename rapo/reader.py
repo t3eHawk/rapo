@@ -41,15 +41,6 @@ class Reader():
         record = dict(result)
         return record
 
-    def read_running_controls(self):
-        """Get list of running controls."""
-        conn = db.connect()
-        table = db.tables.log
-        select = table.select().where(table.c.status == 'W')
-        result = conn.execute(select)
-        rows = [dict(row) for row in result]
-        return rows
-
     def read_control_name(self, process_id):
         """Get control name using passed process_id.
 
@@ -126,20 +117,14 @@ class Reader():
             raise ValueError(message)
         pass
 
-    def read_result_table_names(self, control_name):
-        """Get output table name(s) by control name."""
+    def read_running_controls(self):
+        """Get list of running controls."""
         conn = db.connect()
-        table = db.tables.config
-        select = table.select().where(table.c.control_name == control_name)
-        result = conn.execute(select).first()
-        control_name = control_name.lower()
-        control_type = result.control_type
-        control_method = result.control_method
-        if control_type == 'ANL':
-            return [f'rapo_rest_{control_name}']
-        elif control_type == 'REC' and control_method == 'MA':
-            return [f'rapo_rest_{control_name}']
-        pass
+        table = db.tables.log
+        select = table.select().where(table.c.status == 'P')
+        result = conn.execute(select)
+        rows = [dict(row) for row in result]
+        return rows
 
     pass
 

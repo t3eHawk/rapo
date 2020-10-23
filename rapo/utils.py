@@ -21,10 +21,12 @@ class Utils():
         """
         if input is None:
             output = dt.datetime.now()
-        elif isinstance(input, dt.datetime) is True:
+        elif isinstance(input, dt.datetime):
             output = input
-        elif isinstance(input, str) is True:
+        elif isinstance(input, str):
             output = dt.datetime.fromisoformat(input)
+        elif isinstance(input, (int, float)):
+            output = dt.datetime.fromtimestamp(input)
         return output
 
     def to_lower(self, value):

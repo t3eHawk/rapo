@@ -2,6 +2,7 @@
 
 import argparse
 import datetime as dt
+import getpass
 import json
 import os
 import platform
@@ -83,7 +84,7 @@ class Scheduler():
             self.status = True if self.record['status'] == 'Y' else False
         else:
             self.server = platform.node()
-            self.username = os.getlogin()
+            self.username = getpass.getuser()
             self.pid = os.getpid()
             self.start_date = None
             self.stop_date = None

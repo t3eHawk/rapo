@@ -1,6 +1,7 @@
 """Contains web API elements."""
 
 import datetime as dt
+import getpass
 import os
 import platform
 import signal
@@ -37,7 +38,7 @@ class WEBAPI():
             self.status = True if self.record['status'] == 'Y' else False
         else:
             self.server = platform.node()
-            self.username = os.getlogin()
+            self.username = getpass.getuser()
             self.pid = None
             self.start_date = None
             self.stop_date = None

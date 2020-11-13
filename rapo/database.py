@@ -95,12 +95,15 @@ class Database():
             return result
 
         def _to_string(self, query):
-            if not isinstance(query, str):
+            if isinstance(query, str):
+                return query
+            else:
                 engine = self.database.engine
                 ckwargs = self.database.ckwargs
                 query = query.compile(bind=engine, compile_kwargs=ckwargs)
                 string = query.string
-            return string
+                return string
+            pass
 
         def _separate(self, query):
             if query.rstrip()[-1] != ';':

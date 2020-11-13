@@ -35,7 +35,7 @@ def run_control():
     date_from = request.args.get('date_from')
     date_to = request.args.get('date_to')
     control = Control(name, date_from=date_from, date_to=date_to, date=date)
-    control.run()
+    control.process()
     response = flask.jsonify(name=control.name,
                              date_from=control.date_from,
                              date_to=control.date_to,
@@ -58,6 +58,17 @@ def run_control():
     return response
 
 
+@app.route('/api/cancel-control', methods=['POST'])
+@auth.login_required
+def cancel_control():
+    """Cancel running control."""
+    request = flask.request
+    process_id = int(request.args['id'])
+    control = Control(process_id=process_id)
+    control.cancel()
+    return OK
+
+
 @app.route('/api/get-running-controls')
 @auth.login_required
 def get_running_controls():
@@ -70,7 +81,7 @@ def get_running_controls():
 @app.route('/api/revoke-control-run', methods=['DELETE'])
 @auth.login_required
 def revoke_control_run():
-    """Revoke results of patricular control run."""
+    """Revoke patricular control run."""
     request = flask.request
     process_id = int(request.args['id'])
     control = Control(process_id=process_id)

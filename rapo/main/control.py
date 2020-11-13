@@ -2,8 +2,10 @@
 
 import datetime as dt
 import json
+import multiprocessing as mp
 import sys
 import threading as th
+import time as tm
 import traceback as tb
 
 import sqlalchemy as sa
@@ -345,6 +347,24 @@ class Control():
         pass
 
     @property
+    def initiated(self):
+        """Check if control is initiated."""
+        if self.status == 'I':
+            return True
+        else:
+            return False
+        pass
+
+    @property
+    def working(self):
+        """Check if control is working."""
+        if self.status in ('S', 'P', 'F'):
+            return True
+        else:
+            return False
+        pass
+
+    @property
     def select(self):
         """Get SQL statement to fetch data from data source."""
         return self.parser.parse_select()
@@ -366,8 +386,18 @@ class Control():
 
     @property
     def output_tables(self):
-        """Get output table objects."""
+        """Get output tables."""
         return self.parser.parse_output_tables()
+
+    @property
+    def temp_names(self):
+        """Get temporary table names."""
+        return self.parser.parse_temp_names()
+
+    @property
+    def temp_tables(self):
+        """Get temporary tables."""
+        return self.parser.parse_temp_tables()
 
     @property
     def rule_config(self):
@@ -430,7 +460,7 @@ class Control():
         return text
 
     def run(self):
-        """Run control step by step."""
+        """Run control in an ordinary way."""
         logger.debug(f'{self} Running control...')
         if self._initiate() is True:
             if self._start() is True:
@@ -438,6 +468,29 @@ class Control():
                     if self._finish() is True:
                         if self._done() is True:
                             self._hook()
+        pass
+
+    def process(self):
+        """Run control as a separate accompanied stoppable process."""
+        logger.debug(f'{self} Running control...')
+        if self._initiate() is True:
+            self._resume()
+        pass
+
+    def resume(self):
+        """Resume initiated control run."""
+        if self.initiated:
+            if self._start() is True:
+                if self._progress() is True:
+                    if self._finish() is True:
+                        if self._done() is True:
+                            self._hook()
+        pass
+
+    def cancel(self):
+        """Cancel control run."""
+        if self.working:
+            self._terminate()
         pass
 
     def delete(self):
@@ -474,9 +527,26 @@ class Control():
             return self._exit()
         else:
             logger.debug(f'{self} New record in {db.tables.log} created')
-            logger.info(f'{self} Control owns process_id {self.process_id}')
+            logger.info(f'{self} Control owns process ID {self.process_id}')
             logger.info(f'{self} Control initiated')
             return self._continue()
+        pass
+
+    def _resume(self):
+        process = mp.Process(target=self.resume)
+        process.start()
+        logger.info(f'{self} Running as process on PID {process.pid}')
+        while process.is_alive():
+            tm.sleep(5)
+            control = Control(process_id=self.process_id)
+            if control.status is None:
+                logger.info(f'{self} Process termination request received')
+                process.terminate()
+                logger.info(f'{self} Process PID {process.pid} terminated')
+                self._cancel()
+                continue
+        process.join()
+        self.__dict__.update(control.__dict__)
         pass
 
     def _start(self):
@@ -526,6 +596,19 @@ class Control():
             return self._continue()
         pass
 
+    def _cancel(self):
+        logger.info(f'{self} Canceling control...')
+        try:
+            self.status = 'C'
+            self._update(status=self.status)
+            self.executor.drop_temporary_tables()
+            self.executor.delete_output_records()
+        except Exception:
+            logger.error()
+        else:
+            logger.info(f'{self} Control canceled')
+        pass
+
     def _done(self):
         try:
             self.status = 'D'
@@ -548,11 +631,6 @@ class Control():
             logger.error()
         else:
             logger.info(f'{self} ended with error at {self.end_date}')
-        pass
-
-    def _hook(self):
-        if self.need_hook is True:
-            self.executor.hook()
         pass
 
     def _continue(self):
@@ -689,6 +767,17 @@ class Control():
         logger.info(f'{self} Results saved')
         pass
 
+    def _terminate(self):
+        logger.info(f'{self} Creating process termination request...')
+        try:
+            self.status = None
+            self._update(status=self.status)
+        except Exception:
+            logger.error()
+        else:
+            logger.info(f'{self} Process termination request created')
+        pass
+
     def _delete(self):
         logger.info(f'{self} Deleting results...')
         self.executor.delete_output_records()
@@ -736,6 +825,11 @@ class Control():
         update = update.where(db.tables.log.c.process_id == self.process_id)
         conn.execute(update)
         logger.debug(f'{self} {db.tables.log} updated')
+        pass
+
+    def _hook(self):
+        if self.need_hook is True:
+            self.executor.hook()
         pass
 
     pass
@@ -926,7 +1020,7 @@ class Parser():
         return names
 
     def parse_output_tables(self):
-        """Get list with existing output table objects.
+        """Get list with existing output tables.
 
         Returns
         -------
@@ -935,6 +1029,44 @@ class Parser():
         """
         tables = []
         for name in self.control.output_names:
+            if db.engine.has_table(name):
+                table = db.table(name)
+                tables.append(table)
+        return tables
+
+    def parse_temp_names(self):
+        """Get list with necessary temporary table names.
+
+        Returns
+        -------
+        names : list
+            List necessary temporary names.
+        """
+        names = []
+        fd = f'rapo_temp_fd_{self.control.process_id}'
+        fda = f'rapo_temp_fda_{self.control.process_id}'
+        fdb = f'rapo_temp_fdb_{self.control.process_id}'
+        err = f'rapo_temp_err_{self.control.process_id}'
+        md = f'rapo_temp_md_{self.control.process_id}'
+        nmd = f'rapo_temp_nmd_{self.control.process_id}'
+        if self.control.type == 'ANL':
+            names.extend([fd, err])
+        elif self.control.type == 'REP':
+            names.append(fd)
+        elif self.control.type == 'REC' and self.control.subtype == 'MA':
+            names.extend([fda, fdb, md, nmd])
+        return names
+
+    def parse_temp_tables(self):
+        """Get list with existing temporary tables.
+
+        Returns
+        -------
+        tables : list
+            List of sqlalchemy.Table objects.
+        """
+        tables = []
+        for name in self.control.temp_names:
             if db.engine.has_table(name):
                 table = db.table(name)
                 tables.append(table)
@@ -1538,12 +1670,8 @@ class Executor():
     def drop_temporary_tables(self):
         """Clean all temporary tables created during control execution."""
         logger.debug(f'{self.c} Dropping temporary tables...')
-        for tablename in ('input_table', 'result_table', 'error_table',
-                          'input_table_a', 'error_table_a',
-                          'input_table_b', 'error_table_b'):
-            table = getattr(self.control, tablename)
-            if table is not None:
-                table.drop(db.engine)
+        for table in self.control.temp_tables:
+            table.drop(db.engine)
         logger.debug(f'{self.c} Temporary tables dropped')
         pass
 

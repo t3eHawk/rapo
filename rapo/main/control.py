@@ -533,10 +533,12 @@ class Control():
         pass
 
     def _resume(self):
+        mp.set_start_method('spawn')
         process = mp.Process(target=self.resume)
         process.start()
         logger.info(f'{self} Running as process on PID {process.pid}')
         while process.is_alive():
+            logger.debug(f'{self} PID {process.pid} is alive')
             tm.sleep(5)
             control = Control(process_id=self.process_id)
             if control.status is None:
@@ -545,6 +547,7 @@ class Control():
                 logger.info(f'{self} Process PID {process.pid} terminated')
                 self._cancel()
                 continue
+        logger.debug(f'{self} PID {process.pid} returns {process.exitcode}')
         process.join()
         self.__dict__.update(control.__dict__)
         pass

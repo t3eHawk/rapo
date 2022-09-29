@@ -98,6 +98,8 @@ class Control():
         Flag to define whether save output A or not.
     need_b : bool or None
         Flag to define whether save output B or not.
+    need_prerun_hook : bool or None
+        Flag to define whether run database prerun hook function or not.
     need_hook : bool or None
         Flag to define whether run database hook procedure or not.
     source_table : sqlalchemy.Table
@@ -452,6 +454,11 @@ class Control():
         return True if self.config['need_hook'] == 'Y' else False
 
     @property
+    def need_prerun_hook(self):
+        """Get parameter defining necessity of prerun hook execution."""
+        return True if self.config['need_prerun_hook'] == 'Y' else False
+
+    @property
     def text_error(self):
         """Get textual error representation of current control run."""
         errors = self._all_errors.copy()
@@ -463,11 +470,15 @@ class Control():
         """Run control in an ordinary way."""
         logger.debug(f'{self} Running control...')
         if self._initiate() is True:
-            if self._start() is True:
-                if self._progress() is True:
-                    if self._finish() is True:
-                        if self._done() is True:
-                            self._hook()
+            if self._prerun_hook() is True:
+                if self._start() is True:
+                    if self._progress() is True:
+                        if self._finish() is True:
+                            if self._done() is True:
+                                self._hook()
+            else:
+                self._terminate()
+                self._cancel()
         pass
 
     def process(self):
@@ -480,11 +491,15 @@ class Control():
     def resume(self):
         """Resume initiated control run."""
         if self.initiated:
-            if self._start() is True:
-                if self._progress() is True:
-                    if self._finish() is True:
-                        if self._done() is True:
-                            self._hook()
+            if self._prerun_hook() is True:
+                if self._start() is True:
+                    if self._progress() is True:
+                        if self._finish() is True:
+                            if self._done() is True:
+                                self._hook()
+            else:
+                self._terminate()
+                self._cancel()
         pass
 
     def cancel(self):
@@ -835,8 +850,13 @@ class Control():
             self.executor.hook()
         pass
 
-    pass
-
+    def _prerun_hook(self):
+        if self.need_prerun_hook is True:
+            hook_result, hook_code = self.executor.prerun_hook()
+            if not hook_result:
+                self._update(text_error=f'Control execution stopped because "rapo_prerun_control_hook" function evaluated as NOT OK (code={hook_code})')
+                return False
+        return True
 
 class Parser():
     """Represents control parser."""
@@ -1686,6 +1706,24 @@ class Executor():
         stmt = sa.text(f'begin rapo_control_hook({process_id}); end;')
         conn.execute(stmt)
         logger.debug(f'{self.c} Hook procedure executed')
+        pass
+
+    def prerun_hook(self):
+        """Execute database prerun hook function."""
+        logger.debug(f'{self.c} Executing prerun hook function...')
+        conn = db.connect()
+        process_id = self.control.process_id
+        stmt = sa.text(f'select rapo_prerun_control_hook({process_id}) from dual')
+        try:
+            result_code = conn.execute(stmt).first()[0]
+            if result_code is None or result_code.upper() == 'OK':
+                logger.debug(f'{self.c} Hook function evaluated OK')
+                return True, result_code
+            else:
+                logger.debug(f'{self.c} Hook function evaluated NOT OK ({result_code})')
+                return False, result_code
+        except Exception as e:
+            logger.error(f'{self.c} Error evaluating prerun hook: {e}')
         pass
 
     def _fetch_records_to_table(self, select, tablename):

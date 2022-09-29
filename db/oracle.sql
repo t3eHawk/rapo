@@ -264,3 +264,45 @@ as
 begin
   null;
 end;
+
+alter table rapo_config add (NEED_PRERUN_HOOK varchar2(1) not null default 'N');
+
+create or replace function RAPO_PRERUN_CONTROL_HOOK (in_process_id number) return varchar2
+as
+  v_control_name varchar2(20);
+  v_date_from date;
+  v_return_code varchar2(2000) := null;
+begin   
+  -- extract variables "v_control_name" and "v_date_from" from initiated control
+  select 
+    c.control_name, 
+    l.date_from 
+  into 
+    v_control_name,
+    v_date_from
+  from rapo_log l
+  join rapo_config c on c.control_id = l.control_id
+  where l.process_id = in_process_id
+  fetch first 1 row only;
+  
+  -- Set pre-run conditions here
+  -- return NULL or 'OK' to continue control execution
+  -- return non null string as error code to terminate the execution
+  -- e.g.
+  /*  
+      if v_control_name = 'MY_CONTROL' then
+          select
+              case 
+                  when (select count(*) from DS_MSCS where load_date between v_date_from and v_date_from + 1) = 0 then 'No records in table DS_MSCS'
+                  else 'OK' -- null would also do
+              end into v_return_code
+          from dual;
+      end if;
+  */
+  
+  -- Default return
+  return v_return_code;
+
+exception
+  when others then return 'Error executing RAPO prerun hook: ' || sqlerrm || ', backtrace:' || dbms_utility.format_error_backtrace;
+end;

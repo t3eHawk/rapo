@@ -533,8 +533,8 @@ class Control():
         pass
 
     def _resume(self):
-        mp.set_start_method('spawn')
-        process = mp.Process(target=self.resume)
+        context = mp.get_context('spawn')
+        process = context.Process(target=self.resume)
         process.start()
         logger.info(f'{self} Running as process on PID {process.pid}')
         while process.is_alive():

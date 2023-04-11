@@ -43,22 +43,32 @@ create table rapo_config (
   control_engine      varchar2(30) not null,
   source_name         varchar2(30),
   source_date_field   varchar2(30),
-  output_table        varchar2(4000),
+  source_filter       varchar2(30),
+  output_table        clob,
   source_name_a       varchar2(30),
   source_date_field_a varchar2(30),
-  output_table_a      varchar2(4000),
+  source_filter_a     clob,
+  output_table_a      clob,
   source_name_b       varchar2(30),
   source_date_field_b varchar2(30),
-  output_table_b      varchar2(4000),
-  rule_config         varchar2(4000),
-  error_config        varchar2(4000),
+  source_filter_b     clob,
+  output_table_b      clob,
+  rule_config         clob,
+  case_config         clob,
+  result_config       clob,
+  error_config        clob,
   need_a              varchar2(1),
   need_b              varchar2(1),
   schedule            varchar2(300) not null,
   days_back           number(*, 0) default 1 not null,
   days_retention      number(*, 0) default 365 not null,
+  need_drop           varchar2(1) default 'N' not null,
+  prerun_sql_list     clob,
+  prerun_check_sql    clob,
+  prerun_need_hook    varchar2(1) default 'N' not null,
   need_hook           varchar2(1) default 'Y' not null,
   status              varchar2(1) default 'N' not null,
+  updated_date        date default sysdate not null,
   created_date        date default sysdate not null,
   created_by          varchar2(60) default user not null,
   constraint rapo_config_pk primary key (control_id),
@@ -265,41 +275,39 @@ begin
   null;
 end;
 
-alter table rapo_config add (NEED_PRERUN_HOOK varchar2(1) not null default 'N');
-
-create or replace function RAPO_PRERUN_CONTROL_HOOK (in_process_id number) return varchar2
+create or replace function rapo_prerun_control_hook (in_process_id number) return varchar2
 as
   v_control_name varchar2(20);
   v_date_from date;
   v_return_code varchar2(2000) := null;
-begin   
+begin
   -- extract variables "v_control_name" and "v_date_from" from initiated control
-  select 
-    c.control_name, 
-    l.date_from 
-  into 
+  select
+    c.control_name,
+    l.date_from
+  into
     v_control_name,
     v_date_from
   from rapo_log l
   join rapo_config c on c.control_id = l.control_id
   where l.process_id = in_process_id
   fetch first 1 row only;
-  
+
   -- Set pre-run conditions here
   -- return NULL or 'OK' to continue control execution
   -- return non null string as error code to terminate the execution
   -- e.g.
-  /*  
+  /*
       if v_control_name = 'MY_CONTROL' then
           select
-              case 
+              case
                   when (select count(*) from DS_MSCS where load_date between v_date_from and v_date_from + 1) = 0 then 'No records in table DS_MSCS'
                   else 'OK' -- null would also do
               end into v_return_code
           from dual;
       end if;
   */
-  
+
   -- Default return
   return v_return_code;
 

@@ -4,7 +4,7 @@ import rapo
 import setuptools
 
 
-name = 'rapo'
+name = rapo.__name__
 version = rapo.__version__
 author = rapo.__author__
 author_email = rapo.__email__
@@ -12,10 +12,8 @@ description = rapo.__doc__
 long_description = open('README.md', 'r').read()
 long_description_content_type = 'text/markdown'
 license = rapo.__license__
-url = 'https://github.com/t3eHawk/rapo'
-install_requires = ['pepperoni', 'psutil',
-                    'sqlalchemy', 'cx_oracle', 'sqlparse',
-                    'flask', 'flask_httpauth', 'waitress']
+url = f'https://github.com/t3eHawk/{name}'
+install_requires = open('requirements.txt').read().splitlines()
 packages = setuptools.find_packages()
 classifiers = ['Programming Language :: Python :: 3',
                'License :: OSI Approved :: MIT License',

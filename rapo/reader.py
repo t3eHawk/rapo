@@ -90,7 +90,6 @@ class Reader():
                 raise ValueError(message)
         else:
             return None
-        pass
 
     def read_control_config(self, control_name):
         """Get dictionary with control configuration from DB.
@@ -115,7 +114,6 @@ class Reader():
         else:
             message = f'no control with name {control_name} found'
             raise ValueError(message)
-        pass
 
     def read_running_controls(self):
         """Get list of running controls."""
@@ -125,8 +123,6 @@ class Reader():
         result = conn.execute(select)
         rows = [dict(row) for row in result]
         return rows
-
-    pass
 
 
 reader = Reader()

@@ -243,7 +243,6 @@ class Control():
         self._with_error = False
         self._all_errors = []
         self._pending_error = None
-        pass
 
     def __str__(self):
         """Take control information and represent it as a simple string.
@@ -257,7 +256,6 @@ class Control():
             return f'[{self.name}]'
         else:
             return f'[{self.name}:{self.process_id}]'
-        pass
 
     __repr__ = __str__
 
@@ -274,7 +272,6 @@ class Control():
             type = value.__class__.__name__
             message = f'name must be str or None, not {type}'
             raise TypeError(message)
-        pass
 
     @property
     def process_id(self):
@@ -294,7 +291,6 @@ class Control():
             type = value.__class__.__name__
             message = f'process_id must be int or None, not {type}'
             raise TypeError(message)
-        pass
 
     @property
     def source_name(self):
@@ -346,7 +342,6 @@ class Control():
         else:
             message = f'incorrect status: {value}'
             raise ValueError(message)
-        pass
 
     @property
     def initiated(self):
@@ -355,7 +350,6 @@ class Control():
             return True
         else:
             return False
-        pass
 
     @property
     def working(self):
@@ -364,7 +358,6 @@ class Control():
             return True
         else:
             return False
-        pass
 
     @property
     def select(self):
@@ -410,7 +403,6 @@ class Control():
             return self.parser.parse_reconciliation_rule_config()
         elif self.type == 'REP':
             return []
-        pass
 
     @property
     def error_config(self):
@@ -421,7 +413,6 @@ class Control():
             return self.parser.parse_reconciliation_error_config()
         elif self.type == 'REP':
             return []
-        pass
 
     @property
     def output_columns(self):
@@ -484,14 +475,12 @@ class Control():
             else:
                 self._terminate()
                 self._cancel()
-        pass
 
     def process(self):
         """Run control as a separate accompanied stoppable process."""
         logger.debug(f'{self} Running control...')
         if self._initiate() is True:
             self._resume()
-        pass
 
     def resume(self):
         """Resume initiated control run."""
@@ -505,28 +494,23 @@ class Control():
             else:
                 self._terminate()
                 self._cancel()
-        pass
 
     def cancel(self):
         """Cancel control run."""
         if self.working:
             self._terminate()
-        pass
 
     def delete(self):
         """Delete control results."""
         self._delete()
-        pass
 
     def revoke(self):
         """Revoke control results."""
         self._revoke()
-        pass
 
     def clean(self):
         """Clean control results."""
         self._clean()
-        pass
 
     def _initiate(self):
         logger.info(f'{self} Initiating control...')
@@ -550,7 +534,6 @@ class Control():
             logger.info(f'{self} Control owns process ID {self.process_id}')
             logger.info(f'{self} Control initiated')
             return self._continue()
-        pass
 
     def _resume(self):
         context = mp.get_context('spawn')
@@ -570,7 +553,6 @@ class Control():
         logger.debug(f'{self} PID {process.pid} returns {process.exitcode}')
         process.join()
         self.__dict__.update(control.__dict__)
-        pass
 
     def _start(self):
         logger.info(f'{self} Starting control...')
@@ -589,7 +571,6 @@ class Control():
         else:
             logger.info(f'{self} Control started at {self.start_date}')
             return self._continue()
-        pass
 
     def _progress(self):
         try:
@@ -603,7 +584,6 @@ class Control():
             return self._exit()
         else:
             return self._continue()
-        pass
 
     def _finish(self):
         logger.info(f'{self} Finishing control...')
@@ -617,7 +597,6 @@ class Control():
         else:
             logger.info(f'{self} Control finished')
             return self._continue()
-        pass
 
     def _cancel(self):
         logger.info(f'{self} Canceling control...')
@@ -630,7 +609,6 @@ class Control():
             logger.error()
         else:
             logger.info(f'{self} Control canceled')
-        pass
 
     def _done(self):
         try:
@@ -643,7 +621,6 @@ class Control():
         else:
             logger.info(f'{self} ended at {self.end_date}')
             return self._continue()
-        pass
 
     def _error(self):
         try:
@@ -654,7 +631,6 @@ class Control():
             logger.error()
         else:
             logger.info(f'{self} ended with error at {self.end_date}')
-        pass
 
     def _continue(self):
         return True
@@ -687,35 +663,30 @@ class Control():
                 if self._pending_error is not None:
                     raise self._pending_error
             self._update(fetched_a=self.fetched_a, fetched_b=self.fetched_b)
-        pass
 
     def _fetch_a(self):
         try:
             self.__fetch_a()
         except Exception as error:
             self._pending_error = error
-        pass
 
     def __fetch_a(self):
         logger.info(f'{self} Fetching {self.source_name_a}...')
         self.input_table_a = self.executor.fetch_records_a()
         self.fetched_a = self.executor.count_fetched_a()
         logger.info(f'{self} Records fetched A: {self.fetched_a}')
-        pass
 
     def _fetch_b(self):
         try:
             self.__fetch_b()
         except Exception as error:
             self._pending_error = error
-        pass
 
     def __fetch_b(self):
         logger.info(f'{self} Fetching {self.source_name_b}...')
         self.input_table_b = self.executor.fetch_records_b()
         self.fetched_b = self.executor.count_fetched_b()
         logger.info(f'{self} Records fetched B: {self.fetched_b}')
-        pass
 
     def _execute(self):
         logger.info(f'{self} Executing control...')
@@ -749,31 +720,26 @@ class Control():
                          success=self.success,
                          error_level=self.error_level)
         logger.info(f'{self} Control executed')
-        pass
 
     def _match(self):
         try:
             self.__match()
         except Exception as error:
             self._pending_error = error
-        pass
 
     def __match(self):
         self.result_table = self.executor.match()
         self.success = self.executor.count_matched()
-        pass
 
     def _mismatch(self):
         try:
             self.__mismatch()
         except Exception as error:
             self._pending_error = error
-        pass
 
     def __mismatch(self):
         self.error_table = self.executor.mismatch()
         self.errors = self.executor.count_mismatched()
-        pass
 
     def _save(self):
         logger.info(f'{self} Saving results...')
@@ -788,7 +754,6 @@ class Control():
                 if self.errors or 0 > 0:
                     self.executor.save_mismatches()
         logger.info(f'{self} Results saved')
-        pass
 
     def _terminate(self):
         logger.info(f'{self} Creating process termination request...')
@@ -799,13 +764,11 @@ class Control():
             logger.error()
         else:
             logger.info(f'{self} Process termination request created')
-        pass
 
     def _delete(self):
         logger.info(f'{self} Deleting results...')
         self.executor.delete_output_records()
         logger.info(f'{self} Results deleted')
-        pass
 
     def _revoke(self):
         try:
@@ -817,7 +780,6 @@ class Control():
             logger.error()
         else:
             logger.info(f'{self} Control revoked')
-        pass
 
     def _clean(self):
         logger.info(f'{self} Cleaning control results...')
@@ -838,7 +800,6 @@ class Control():
             logger.info(f'{self} Control results cleaned')
         else:
             logger.info(f'{self} No control results to clean')
-        pass
 
     def _update(self, **kwargs):
         logger.debug(f'{self} Updating {db.tables.log} with {kwargs}')
@@ -863,12 +824,12 @@ class Control():
         if self.need_hook and self.need_postrun_hook:
             self.executor.postrun_hook()
 
+
 class Parser():
     """Represents control parser."""
 
     def __init__(self, owner):
         self.__owner = owner
-        pass
 
     @property
     def control(self):
@@ -1238,7 +1199,6 @@ class Parser():
             else:
                 logger.debug(f'{self.c} Output columns was not configured')
                 return None
-        pass
 
     def parse_outdated_results(self):
         """Create list with tables and IDs of outdated control results."""
@@ -1262,9 +1222,6 @@ class Parser():
             logger.debug(f'{self.c} Outdated results in {table}: {pids}')
             if pids:
                 yield (table, pids)
-        pass
-
-    pass
 
 
 class Executor():
@@ -1272,7 +1229,6 @@ class Executor():
 
     def __init__(self, bind):
         self.__bind = bind
-        pass
 
     @property
     def control(self):
@@ -1598,7 +1554,6 @@ class Executor():
         insert = table.insert().from_select(table.columns, select)
         conn.execute(insert)
         logger.debug(f'{self.c} Saving done')
-        pass
 
     def save_errors(self):
         """Save defined errors as output records."""
@@ -1612,7 +1567,6 @@ class Executor():
         insert = table.insert().from_select(table.columns, select)
         conn.execute(insert)
         logger.debug(f'{self.c} Saving done')
-        pass
 
     def save_matches(self):
         """Save found matches as RAPO results."""
@@ -1629,7 +1583,6 @@ class Executor():
             id = table.c.rapo_process_id
             delete = table.delete().where(id == self.control.process_id)
             conn.execute(delete)
-        pass
 
     def prepare_output_table(self):
         """Check RAPO_RESULT and create it at initial control run.
@@ -1751,5 +1704,3 @@ class Executor():
         fetched = conn.execute(count).scalar()
         logger.debug(f'{self.c} Fetched in {table} counted')
         return fetched
-
-    pass

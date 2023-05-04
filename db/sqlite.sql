@@ -64,6 +64,8 @@ create table rapo_config (
   prerun_check_sql    text,
   prerun_need_hook    text default 'N' not null,
   need_hook           text default 'Y' not null,
+  need_prerun_hook    text default 'N' not null,
+  need_postrun_hook   text default 'N' not null,
   status              text default 'N' not null,
   updated_date        date default (datetime('now', 'localtime')) not null,
   created_date        date default (datetime('now', 'localtime')) not null,
@@ -101,8 +103,7 @@ create table rapo_log (
   errors_b      integer,
   error_level_a float,
   error_level_b float,
-  text_log      clob,
-  text_error    clob
+  text_message  text
 );
 
 create index rapo_log_control_id_ix on rapo_log (control_id);

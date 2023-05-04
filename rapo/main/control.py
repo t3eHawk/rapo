@@ -454,6 +454,11 @@ class Control():
         return True if self.config['need_hook'] == 'Y' else False
 
     @property
+    def need_postrun_hook(self):
+        """Get parameter defining necessity of hook execution."""
+        return True if self.config['need_postrun_hook'] == 'Y' else False
+
+    @property
     def need_prerun_hook(self):
         """Get parameter defining necessity of prerun hook execution."""
         return True if self.config['need_prerun_hook'] == 'Y' else False
@@ -469,13 +474,13 @@ class Control():
     def run(self):
         """Run control in an ordinary way."""
         logger.debug(f'{self} Running control...')
-        if self._initiate() is True:
-            if self._prerun_hook() is True:
-                if self._start() is True:
-                    if self._progress() is True:
-                        if self._finish() is True:
-                            if self._done() is True:
-                                self._hook()
+        if self._initiate():
+            if self._prerun_hook():
+                if self._start():
+                    if self._progress():
+                        if self._finish():
+                            if self._done():
+                                self._postrun_hook()
             else:
                 self._terminate()
                 self._cancel()
@@ -491,12 +496,12 @@ class Control():
     def resume(self):
         """Resume initiated control run."""
         if self.initiated:
-            if self._prerun_hook() is True:
-                if self._start() is True:
-                    if self._progress() is True:
-                        if self._finish() is True:
-                            if self._done() is True:
-                                self._hook()
+            if self._prerun_hook():
+                if self._start():
+                    if self._progress():
+                        if self._finish():
+                            if self._done():
+                                self._postrun_hook()
             else:
                 self._terminate()
                 self._cancel()
@@ -843,20 +848,20 @@ class Control():
         update = update.where(db.tables.log.c.process_id == self.process_id)
         conn.execute(update)
         logger.debug(f'{self} {db.tables.log} updated')
-        pass
-
-    def _hook(self):
-        if self.need_hook is True:
-            self.executor.hook()
-        pass
 
     def _prerun_hook(self):
-        if self.need_prerun_hook is True:
+        if self.need_hook and self.need_prerun_hook:
             hook_result, hook_code = self.executor.prerun_hook()
             if not hook_result:
-                self._update(text_error=f'Control execution stopped because "rapo_prerun_control_hook" function evaluated as NOT OK (code={hook_code})')
+                message = ('Control execution stopped because PRERUN HOOK ',
+                           f'function evaluated as NOT OK [{hook_code}]')
+                self._update(text_message=message)
                 return False
         return True
+
+    def _postrun_hook(self):
+        if self.need_hook and self.need_postrun_hook:
+            self.executor.postrun_hook()
 
 class Parser():
     """Represents control parser."""
@@ -1696,35 +1701,35 @@ class Executor():
         for table in self.control.temp_tables:
             table.drop(db.engine)
         logger.debug(f'{self.c} Temporary tables dropped')
-        pass
-
-    def hook(self):
-        """Execute database hook procedure."""
-        logger.debug(f'{self.c} Executing hook procedure...')
-        conn = db.connect()
-        process_id = self.control.process_id
-        stmt = sa.text(f'begin rapo_control_hook({process_id}); end;')
-        conn.execute(stmt)
-        logger.debug(f'{self.c} Hook procedure executed')
-        pass
 
     def prerun_hook(self):
         """Execute database prerun hook function."""
         logger.debug(f'{self.c} Executing prerun hook function...')
         conn = db.connect()
         process_id = self.control.process_id
-        stmt = sa.text(f'select rapo_prerun_control_hook({process_id}) from dual')
+        select = f'select rapo_prerun_control_hook({process_id}) from dual'
+        stmt = sa.text(select)
         try:
-            result_code = conn.execute(stmt).first()[0]
+            result_code = conn.execute(stmt).scalar()
             if result_code is None or result_code.upper() == 'OK':
                 logger.debug(f'{self.c} Hook function evaluated OK')
                 return True, result_code
             else:
-                logger.debug(f'{self.c} Hook function evaluated NOT OK ({result_code})')
+                logger.debug(f'{self.c} Hook function evaluated NOT OK '
+                             f'[{result_code}]')
                 return False, result_code
-        except Exception as e:
-            logger.error(f'{self.c} Error evaluating prerun hook: {e}')
-        pass
+        except Exception:
+            logger.error(f'{self.c} Error evaluating prerun hook')
+            logger.error()
+
+    def postrun_hook(self):
+        """Execute database postrun hook procedure."""
+        logger.debug(f'{self.c} Executing postrun hook procedure...')
+        conn = db.connect()
+        process_id = self.control.process_id
+        stmt = sa.text(f'begin rapo_postrun_control_hook({process_id}); end;')
+        conn.execute(stmt)
+        logger.debug(f'{self.c} Hook procedure executed')
 
     def _fetch_records_to_table(self, select, tablename):
         logger.debug(f'{self.c} Start fetching...')

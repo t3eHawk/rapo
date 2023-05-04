@@ -67,6 +67,8 @@ create table rapo_config (
   prerun_check_sql    clob,
   prerun_need_hook    varchar2(1) default 'N' not null,
   need_hook           varchar2(1) default 'Y' not null,
+  need_prerun_hook    varchar2(1) default 'N' not null,
+  need_postrun_hook   varchar2(1) default 'N' not null,
   status              varchar2(1) default 'N' not null,
   updated_date        date default sysdate not null,
   created_date        date default sysdate not null,
@@ -215,6 +217,7 @@ create table rapo_log (
   error_level_b float,
   text_log      clob,
   text_error    clob,
+  text_message  clob,
   constraint rapo_log_pk primary key (process_id)
 );
 
@@ -267,14 +270,6 @@ create table rapo_web_api (
 insert into rapo_web_api (id, status) values ('RAPO.WEB.API', 'N');
 commit;
 
-create or replace procedure rapo_control_hook (
-  in_process_id number
-)
-as
-begin
-  null;
-end;
-
 create or replace function rapo_prerun_control_hook (in_process_id number) return varchar2
 as
   v_control_name varchar2(20);
@@ -313,4 +308,12 @@ begin
 
 exception
   when others then return 'Error executing RAPO prerun hook: ' || sqlerrm || ', backtrace:' || dbms_utility.format_error_backtrace;
+end;
+
+create or replace procedure rapo_postrun_control_hook (
+  in_process_id number
+)
+as
+begin
+  null;
 end;

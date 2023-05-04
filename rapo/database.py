@@ -3,6 +3,8 @@
 import sys
 
 import sqlalchemy as sa
+import cx_Oracle as oracle
+
 import sqlparse as spe
 
 from .config import config
@@ -14,30 +16,9 @@ class Database():
     ckwargs = {'literal_binds': True}
 
     def __init__(self):
-        vendor = config['DATABASE']['vendor']
-        host = config['DATABASE']['host']
-        port = config['DATABASE']['port']
-        path = config['DATABASE'].get('path')
-        sid = config['DATABASE'].get('sid')
-        service = config['DATABASE'].get('service')
-        user = config['DATABASE']['user']
-        password = config['DATABASE']['password']
-        if vendor == 'sqlite' and path is not None:
-            if sys.platform.startswith('win'):
-                url = f'{vendor}:///{path}'
-            else:
-                url = f'{vendor}:////{path}'
-        else:
-            url = f'{vendor}://{user}:{password}@{host}:{port}'
-            if sid is not None:
-                url += f'/{sid}'
-            elif service is not None:
-                url += f'/?service_name={service}'
-        settings = dict(pool_pre_ping=True, max_identifier_length=128)
-        self.engine = sa.create_engine(url, **settings)
-        self.tables = self.Tables(self)
+        self.setup()
+        self.load()
         self.formatter = self.Formatter(self)
-        pass
 
     class Tables():
         """Represents database tables."""
@@ -48,7 +29,6 @@ class Database():
             self.log = self.load('rapo_log')
             self.scheduler = self.load('rapo_scheduler')
             self.web_api = self.load('rapo_web_api')
-            pass
 
         def load(self, name):
             """Load one of database table by name.
@@ -63,14 +43,11 @@ class Database():
             table = sa.Table(name, meta, autoload=True, autoload_with=engine)
             return table
 
-        pass
-
     class Formatter():
         """Represents database query formatter."""
 
         def __init__(self, database):
             self.database = database
-            pass
 
         def __call__(self, *queries):
             """Format received raw SQL query into final human-read form."""
@@ -103,14 +80,75 @@ class Database():
                 query = query.compile(bind=engine, compile_kwargs=ckwargs)
                 string = query.string
                 return string
-            pass
 
         def _separate(self, query):
             if query.rstrip()[-1] != ';':
                 query = f'{query.rstrip()};'
             return query
 
-        pass
+    def setup(self):
+        """Setup database engine based on configuration."""
+        used_config = config['DATABASE']
+        try:
+            vendor_name = used_config['vendor_name']
+        except KeyError as error:
+            if used_config.get('vendor'):
+                vendor_name = used_config['vendor']
+                print('Please use parameter vendor_name instead of vendor, ',
+                      'which is depreciated and will be removed soon.')
+            else:
+                raise error
+        driver_name = used_config.get('driver_name')
+        host = used_config.get('host')
+        port = used_config.get('port')
+        path = used_config.get('path')
+        sid = used_config.get('sid')
+        service_name = used_config.get('service')
+        service_name = used_config.get('service_name')
+        try:
+            username = used_config.get('username')
+        except KeyError as error:
+            if used_config.get('user'):
+                username = used_config.get('user')
+                print('Please use parameter username instead of user, ',
+                      'which is depreciated and will be removed soon.')
+            else:
+                raise error
+        password = used_config.get('password')
+        client_path = used_config.get('client_path')
+        max_identifier_length = used_config.get('max_identifier_length', 128)
+        max_overflow = used_config.get('max_overflow', 10)
+        pool_pre_ping = used_config.get('pool_pre_ping', True)
+        pool_size = used_config.get('pool_size', 5)
+        pool_recycle = used_config.get('pool_recycle', -1)
+        pool_timeout = used_config.get('pool_timeout', 30)
+        if vendor_name == 'sqlite' and path:
+            if sys.platform.startswith('win'):
+                url = f'{vendor_name}:///{path}'
+            else:
+                url = f'{vendor_name}:////{path}'
+        elif vendor_name == 'oracle':
+            credentials = f'{username}:{password}'
+            address = f'{host}:{port}'
+            identifier = sid if sid else f'?service_name={service_name}'
+            if driver_name:
+                url = f'{vendor_name}+{driver_name}://{credentials}@{address}'
+            else:
+                url = f'{vendor_name}://{credentials}@{address}'
+            url += f'/{identifier}'
+            if client_path:
+                oracle.init_oracle_client(lib_dir=client_path)
+        settings = dict(max_identifier_length=max_identifier_length,
+                        max_overflow=max_overflow,
+                        pool_pre_ping=pool_pre_ping,
+                        pool_size=pool_size,
+                        pool_recycle=pool_recycle,
+                        pool_timeout=pool_timeout)
+        self.engine = sa.create_engine(url, **settings)
+
+    def load(self):
+        """Read database objects into memory."""
+        self.tables = self.Tables(self)
 
     def connect(self):
         """Get database connection.
@@ -134,8 +172,6 @@ class Database():
         meta = sa.MetaData()
         table = sa.Table(name, meta, autoload=True, autoload_with=self.engine)
         return table
-
-    pass
 
 
 db = Database()

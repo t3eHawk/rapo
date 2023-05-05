@@ -517,14 +517,13 @@ class Control():
         try:
             self.status = 'I'
             logger.debug(f'{self} Creating new record in {db.tables.log}')
-            conn = db.connect()
             insert = db.tables.log.insert()
             insert = insert.values(control_id=self.id,
                                    added=dt.datetime.now(),
                                    status=self.status,
                                    date_from=self.date_from,
                                    date_to=self.date_to)
-            result = conn.execute(insert)
+            result = db.execute(insert)
             self.process_id = int(result.inserted_primary_key[0])
         except Exception:
             logger.error()
@@ -783,7 +782,6 @@ class Control():
 
     def _clean(self):
         logger.info(f'{self} Cleaning control results...')
-        conn = db.connect()
         outdated_results = list(self.parser.parse_outdated_results())
         if outdated_results:
             for table, process_ids in outdated_results:
@@ -795,7 +793,7 @@ class Control():
                     text = db.formatter(query)
                     logger.debug(f'{self} Deleting from {table} '
                                  f'with query:\n{text}')
-                    conn.execute(query)
+                    db.execute(query)
                     logger.info(f'{repr} Results in {table} deleted')
             logger.info(f'{self} Control results cleaned')
         else:
@@ -803,11 +801,10 @@ class Control():
 
     def _update(self, **kwargs):
         logger.debug(f'{self} Updating {db.tables.log} with {kwargs}')
-        conn = db.connect()
         update = db.tables.log.update()
         update = update.values(**kwargs, updated=dt.datetime.now())
         update = update.where(db.tables.log.c.process_id == self.process_id)
-        conn.execute(update)
+        db.execute(update)
         logger.debug(f'{self} {db.tables.log} updated')
 
     def _prerun_hook(self):
@@ -1202,7 +1199,6 @@ class Parser():
 
     def parse_outdated_results(self):
         """Create list with tables and IDs of outdated control results."""
-        conn = db.connect()
         log = db.tables.log
         control_id = self.control.id
         days_retention = self.control.config['days_retention']
@@ -1217,7 +1213,7 @@ class Parser():
             text = db.formatter(query)
             logger.debug(f'{self.c} Searching outdated results in {table} '
                          f'with query:\n{text}')
-            result = conn.execute(query)
+            result = db.execute(query)
             pids = [row[0] for row in result]
             logger.debug(f'{self.c} Outdated results in {table}: {pids}')
             if pids:
@@ -1295,7 +1291,6 @@ class Executor():
             chosen engine.
         """
         logger.debug(f'{self.c} Analyzing...')
-        conn = db.connect()
         input_table = self.control.input_table
         output_columns = self.control.output_columns
         if output_columns is None or len(output_columns) == 0:
@@ -1331,7 +1326,7 @@ class Executor():
         ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
         text = db.formatter(ctas)
         logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
-        conn.execute(ctas)
+        db.execute(ctas)
         logger.debug(f'{self.c} {tablename} created')
 
         table = db.table(tablename)
@@ -1349,7 +1344,6 @@ class Executor():
         """
         logger.debug(f'{self.c} Defining matches...')
 
-        conn = db.connect()
         table_a = self.control.input_table_a
         table_b = self.control.input_table_b
 
@@ -1397,7 +1391,7 @@ class Executor():
         ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
         text = db.formatter(ctas)
         logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
-        conn.execute(ctas)
+        db.execute(ctas)
         logger.debug(f'{self.c} {tablename} created')
 
         table = db.table(tablename)
@@ -1415,7 +1409,6 @@ class Executor():
         """
         logger.debug(f'{self.c} Defining mismatches...')
 
-        conn = db.connect()
         table_a = self.control.input_table_a
         table_b = self.control.input_table_b
 
@@ -1463,7 +1456,7 @@ class Executor():
         ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
         text = db.formatter(ctas)
         logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
-        conn.execute(ctas)
+        db.execute(ctas)
         logger.debug(f'{self.c} {tablename} created')
 
         table = db.table(tablename)
@@ -1501,10 +1494,9 @@ class Executor():
         """
         logger.debug(f'{self.c} Counting errors...')
         if self.control.engine == 'DB':
-            conn = db.connect()
             table = self.control.error_table
             count = sa.select([sa.func.count()]).select_from(table)
-            errors = conn.execute(count).scalar()
+            errors = db.execute(count).scalar()
         logger.debug(f'{self.c} Errors counted')
         return errors
 
@@ -1518,10 +1510,9 @@ class Executor():
         """
         logger.debug(f'{self.c} Counting matched...')
         if self.control.engine == 'DB':
-            conn = db.connect()
             table = self.control.result_table
             count = sa.select([sa.func.count()]).select_from(table)
-            matched = conn.execute(count).scalar()
+            matched = db.execute(count).scalar()
         logger.debug(f'{self.c} Matched counted')
         return matched
 
@@ -1535,37 +1526,34 @@ class Executor():
         """
         logger.debug(f'{self.c} Counting mismatched')
         if self.control.engine == 'DB':
-            conn = db.connect()
             table = self.control.error_table
             count = sa.select([sa.func.count()]).select_from(table)
-            mismatched = conn.execute(count).scalar()
+            mismatched = db.execute(count).scalar()
         logger.debug(f'{self.c} Mismatched counted')
         return mismatched
 
     def save_results(self):
         """Save defined results as output records."""
         logger.debug(f'{self.c} Start saving...')
-        conn = db.connect()
         table = self.control.result_table
         process_id = sa.literal(self.control.process_id)
         select = sa.select([*table.columns,
                             process_id.label('rapo_process_id')])
         table = self.prepare_output_table()
         insert = table.insert().from_select(table.columns, select)
-        conn.execute(insert)
+        db.execute(insert)
         logger.debug(f'{self.c} Saving done')
 
     def save_errors(self):
         """Save defined errors as output records."""
         logger.debug(f'{self.c} Start saving...')
-        conn = db.connect()
         table = self.control.error_table
         process_id = sa.literal(self.control.process_id)
         select = sa.select([*table.columns,
                             process_id.label('rapo_process_id')])
         table = self.prepare_output_table()
         insert = table.insert().from_select(table.columns, select)
-        conn.execute(insert)
+        db.execute(insert)
         logger.debug(f'{self.c} Saving done')
 
     def save_matches(self):
@@ -1578,11 +1566,10 @@ class Executor():
 
     def delete_output_records(self):
         """Delete records saved as control results in DB table."""
-        conn = db.connect()
         for table in self.control.output_tables:
             id = table.c.rapo_process_id
             delete = table.delete().where(id == self.control.process_id)
-            conn.execute(delete)
+            db.execute(delete)
 
     def prepare_output_table(self):
         """Check RAPO_RESULT and create it at initial control run.
@@ -1593,8 +1580,7 @@ class Executor():
             Object reflecting RAPO_RESULT.
         """
         tablename = f'rapo_rest_{self.control.name}'.lower()
-        conn = db.connect()
-        if conn.engine.has_table(tablename) is False:
+        if db.engine.has_table(tablename) is False:
             logger.debug(f'{self.c} Table {tablename} will be created')
 
             columns = []
@@ -1641,9 +1627,9 @@ class Executor():
             text = db.formatter(ctas, index, compress)
             logger.debug(f'{self.c} Creating table {tablename} '
                          f'with query:\n{text}')
-            conn.execute(ctas)
-            conn.execute(index)
-            conn.execute(compress)
+            db.execute(ctas)
+            db.execute(index)
+            db.execute(compress)
             logger.debug(f'{self.c} {tablename} created')
         table = db.table(tablename)
         return table
@@ -1658,12 +1644,11 @@ class Executor():
     def prerun_hook(self):
         """Execute database prerun hook function."""
         logger.debug(f'{self.c} Executing prerun hook function...')
-        conn = db.connect()
         process_id = self.control.process_id
         select = f'select rapo_prerun_control_hook({process_id}) from dual'
         stmt = sa.text(select)
         try:
-            result_code = conn.execute(stmt).scalar()
+            result_code = db.execute(stmt).scalar()
             if result_code is None or result_code.upper() == 'OK':
                 logger.debug(f'{self.c} Hook function evaluated OK')
                 return True, result_code
@@ -1678,20 +1663,18 @@ class Executor():
     def postrun_hook(self):
         """Execute database postrun hook procedure."""
         logger.debug(f'{self.c} Executing postrun hook procedure...')
-        conn = db.connect()
         process_id = self.control.process_id
         stmt = sa.text(f'begin rapo_postrun_control_hook({process_id}); end;')
-        conn.execute(stmt)
+        db.execute(stmt)
         logger.debug(f'{self.c} Hook procedure executed')
 
     def _fetch_records_to_table(self, select, tablename):
         logger.debug(f'{self.c} Start fetching...')
-        conn = db.connect()
         select = select.compile(bind=db.engine, compile_kwargs=db.ckwargs)
         ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
         text = db.formatter(ctas)
         logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
-        conn.execute(ctas)
+        db.execute(ctas)
         logger.info(f'{self.c} {tablename} created')
         table = db.table(tablename)
         logger.debug(f'{self.c} Fetching done')
@@ -1699,8 +1682,7 @@ class Executor():
 
     def _count_fetched_to_table(self, table):
         logger.debug(f'{self.c} Counting fetched in {table}...')
-        conn = db.connect()
         count = sa.select([sa.func.count()]).select_from(table)
-        fetched = conn.execute(count).scalar()
+        fetched = db.execute(count).scalar()
         logger.debug(f'{self.c} Fetched in {table} counted')
         return fetched

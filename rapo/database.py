@@ -161,6 +161,24 @@ class Database():
         connection = self.engine.connect()
         return connection
 
+    def execute(self, statement):
+        """Execute given SQL statement.
+
+        Returns
+        -------
+        result : sqlalchemy.engine.CursorResult
+            Execution result object.
+        """
+        try:
+            conn = self.connect()
+            result = conn.execute(statement)
+        except Exception as error:
+            conn.close()
+            raise error
+        else:
+            conn.close()
+            return result
+
     def table(self, name):
         """Get database table.
 

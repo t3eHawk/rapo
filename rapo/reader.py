@@ -19,10 +19,9 @@ class Reader():
         record : dict
             Ordinary dictionary with web API information from DB table.
         """
-        conn = db.connect()
         table = db.tables.scheduler
         select = table.select()
-        result = conn.execute(select).first()
+        result = db.execute(select).first()
         record = dict(result)
         return record
 
@@ -34,10 +33,9 @@ class Reader():
         record : dict
             Ordinary dictionary with web API information from DB table.
         """
-        conn = db.connect()
         table = db.tables.web_api
         select = table.select()
-        result = conn.execute(select).first()
+        result = db.execute(select).first()
         record = dict(result)
         return record
 
@@ -54,13 +52,12 @@ class Reader():
         control_name : str
             Name of the defined control.
         """
-        conn = db.connect()
         log = db.tables.log
         config = db.tables.config
         join = log.join(config, log.c.control_id == config.c.control_id)
         select = (sa.select([config.c.control_name]).select_from(join)
                     .where(log.c.process_id == process_id))
-        result = conn.execute(select).first()
+        result = db.execute(select).first()
         control_name = result.control_name
         return control_name
 
@@ -78,10 +75,9 @@ class Reader():
             Ordinary dictionary with control result.
         """
         if process_id:
-            conn = db.connect()
             table = db.tables.log
             select = table.select().where(table.c.process_id == process_id)
-            result = conn.execute(select).first()
+            result = db.execute(select).first()
             if result:
                 record = dict(result)
                 return record
@@ -104,10 +100,9 @@ class Reader():
         record : dict
             Ordinary dictionary with control configuration.
         """
-        conn = db.connect()
         table = db.tables.config
         select = table.select().where(table.c.control_name == control_name)
-        result = conn.execute(select).first()
+        result = db.execute(select).first()
         if result:
             record = dict(result)
             return record
@@ -117,10 +112,9 @@ class Reader():
 
     def read_running_controls(self):
         """Get list of running controls."""
-        conn = db.connect()
         table = db.tables.log
         select = table.select().where(table.c.status == 'P')
-        result = conn.execute(select)
+        result = db.execute(select)
         rows = [dict(row) for row in result]
         return rows
 

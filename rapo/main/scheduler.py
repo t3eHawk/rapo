@@ -183,20 +183,18 @@ class Scheduler():
             return self._terminate()
 
     def _enable(self):
-        conn = db.connect()
         update = self.table.update().values(server=self.server,
                                             username=self.username,
                                             pid=self.pid,
                                             start_date=self.start_date,
                                             stop_date=self.stop_date,
                                             status='Y')
-        conn.execute(update)
+        db.execute(update)
 
     def _disable(self):
-        conn = db.connect()
         update = self.table.update().values(stop_date=self.stop_date,
                                             status='N')
-        conn.execute(update)
+        db.execute(update)
 
     def _exit(self):
         return sys.exit()
@@ -307,10 +305,9 @@ class Scheduler():
 
     def _sked(self):
         logger.debug('Getting schedule...')
-        conn = db.connect()
         table = db.tables.config
         select = table.select()
-        result = conn.execute(select)
+        result = db.execute(select)
         for row in result:
             try:
                 name = row.control_name
@@ -387,10 +384,9 @@ class Scheduler():
             time.sleep(1)
 
     def _clean(self):
-        conn = db.connect()
         config = db.tables.config
         select = config.select().order_by(config.c.control_id)
-        result = conn.execute(select)
+        result = db.execute(select)
         for row in result:
             control = Control(name=row.control_name)
             control.clean()

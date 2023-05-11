@@ -820,6 +820,15 @@ class Control():
         outdated_results = list(self.parser.parse_outdated_results())
         if outdated_results:
             for table, process_ids in outdated_results:
+                # when days_retention control parameter is zero -> process_ids is set to None 
+                if process_ids is None:
+                    logger.info(f'{self} Truncating table {table}...')
+                    query = f'truncate table {table}'
+                    text = db.formatter(query)
+                    logger.debug(f'{self} Truncating table {table} '
+                                 f'with query:\n{text}')                   
+                    conn.execute(query)
+                    continue
                 for process_id in process_ids:
                     repr = f'[{self.name}:{process_id}]'
                     logger.info(f'{repr} Deleting results in {table}...')
@@ -1242,6 +1251,10 @@ class Parser():
         control_id = self.control.id
         days_retention = self.control.config['days_retention']
         for table in self.parse_output_tables():
+            # when days_retention control parameter is zero -> mark table to be truncated instead of deleting pids
+            if not days_retention:
+                yield (table, None)
+                break
             select = sa.select([log.c.process_id])
             date = sa.func.trunc(sa.func.sysdate())-days_retention
             subq = sa.select([table.c.rapo_process_id])

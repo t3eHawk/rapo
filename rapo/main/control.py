@@ -799,22 +799,33 @@ class Control():
 
     def _clean(self):
         logger.info(f'{self} Cleaning control results...')
-        outdated_results = list(self.parser.parse_outdated_results())
-        if outdated_results:
-            for table, process_ids in outdated_results:
-                for process_id in process_ids:
-                    repr = f'[{self.name}:{process_id}]'
-                    logger.info(f'{repr} Deleting results in {table}...')
-                    id = table.c.rapo_process_id
-                    query = table.delete().where(id == process_id)
-                    text = db.formatter(query)
-                    logger.debug(f'{self} Deleting from {table} '
-                                 f'with query:\n{text}')
-                    db.execute(query)
-                    logger.info(f'{repr} Results in {table} deleted')
-            logger.info(f'{self} Control results cleaned')
+        if self.days_retention == 0:
+            for table in self.output_tables:
+                repr = f'[{self.name}]'
+                logger.info(f'{repr} Deleting all results in {table}...')
+                query = f'truncate table {table.name}'
+                text = db.formatter(query)
+                logger.debug(f'{self} Deleting from {table} '
+                             f'with query:\n{text}')
+                db.execute(query)
+                logger.info(f'{repr} Results in {table} deleted')
         else:
-            logger.info(f'{self} No control results to clean')
+            outdated_results = list(self.parser.parse_outdated_results())
+            if outdated_results:
+                for table, process_ids in outdated_results:
+                    for process_id in process_ids:
+                        repr = f'[{self.name}:{process_id}]'
+                        logger.info(f'{repr} Deleting results in {table}...')
+                        id = table.c.rapo_process_id
+                        query = table.delete().where(id == process_id)
+                        text = db.formatter(query)
+                        logger.debug(f'{self} Deleting from {table} '
+                                     f'with query:\n{text}')
+                        db.execute(query)
+                        logger.info(f'{repr} Results in {table} deleted')
+                logger.info(f'{self} Control results cleaned')
+            else:
+                logger.info(f'{self} No control results to clean')
 
     def _update(self, **kwargs):
         logger.debug(f'{self} Updating {db.tables.log} with {kwargs}')

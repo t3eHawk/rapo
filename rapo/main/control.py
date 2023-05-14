@@ -435,27 +435,37 @@ class Control():
     @property
     def need_a(self):
         """Get parameter defining necessity of data source A saving."""
-        return True if self.config['need_a'] == 'Y' else False
+        return self.parser.parse_boolean('need_a')
 
     @property
     def need_b(self):
         """Get parameter defining necessity of data source B saving."""
-        return True if self.config['need_b'] == 'Y' else False
+        return self.parser.parse_boolean('need_b')
+
+    @property
+    def with_deletion(self):
+        """Get parameter to clear output table before usage."""
+        return self.parser.parse_boolean('with_deletion')
+
+    @property
+    def with_drop(self):
+        """Get parameter to drop output table before usage."""
+        return self.parser.parse_boolean('with_drop')
 
     @property
     def need_hook(self):
         """Get parameter defining necessity of hook execution."""
-        return True if self.config['need_hook'] == 'Y' else False
-
-    @property
-    def need_postrun_hook(self):
-        """Get parameter defining necessity of hook execution."""
-        return True if self.config['need_postrun_hook'] == 'Y' else False
+        return self.parser.parse_boolean('need_hook')
 
     @property
     def need_prerun_hook(self):
         """Get parameter defining necessity of prerun hook execution."""
-        return True if self.config['need_prerun_hook'] == 'Y' else False
+        return self.parser.parse_boolean('need_prerun_hook')
+
+    @property
+    def need_postrun_hook(self):
+        """Get parameter defining necessity of postrun hook execution."""
+        return self.parser.parse_boolean('need_postrun_hook')
 
     @property
     def text_error(self):
@@ -866,6 +876,33 @@ class Parser():
         """Shortcut for control."""
         return self.__owner
 
+    def parse_boolean(self, name):
+        """Prepare a boolean value of the parameter by name.
+
+        Parameters
+        ----------
+        name : str
+            Name of the parameter from the configuration table.
+
+        Returns
+        -------
+        value : bool
+            Parameter value represented as boolean.
+        """
+        return True if self.control.config[name] == 'Y' else False
+
+    def parse_date(self, value, hour=None, minute=None, second=None):
+        """Get date from initial raw value."""
+        return self._parse_date(value, hour=hour, minute=minute, second=second)
+
+    def _parse_date(self, value, hour=None, minute=None, second=None):
+        date = utils.to_date(value)
+        if hour is not None or minute is not None or second is not None:
+            kwargs = {'hour': hour, 'minute': minute, 'second': second}
+            kwargs = {k: v for k, v in kwargs.items() if v is not None}
+            date = date.replace(**kwargs)
+        return date
+
     def parse_dates(self):
         """."""
         days_back = self.control.config['days_back']
@@ -893,18 +930,6 @@ class Parser():
         """
         timestamp = self.control.timestamp
         date = self._parse_date(timestamp, 23, 59, 59)
-        return date
-
-    def parse_date(self, value, hour=None, minute=None, second=None):
-        """Get date from initial raw value."""
-        return self._parse_date(value, hour=hour, minute=minute, second=second)
-
-    def _parse_date(self, value, hour=None, minute=None, second=None):
-        date = utils.to_date(value)
-        if hour is not None or minute is not None or second is not None:
-            kwargs = {'hour': hour, 'minute': minute, 'second': second}
-            kwargs = {k: v for k, v in kwargs.items() if v is not None}
-            date = date.replace(**kwargs)
         return date
 
     def parse_source_table(self):
@@ -1608,7 +1633,14 @@ class Executor():
             Object reflecting RAPO_RESULT.
         """
         tablename = f'rapo_rest_{self.control.name}'.lower()
-        if db.engine.has_table(tablename) is False:
+        if self.control.with_deletion or self.control.with_drop:
+            if db.engine.has_table(tablename):
+                if self.control.with_deletion:
+                    query = f'truncate table {tablename}'
+                elif self.control.with_drop:
+                    query = f'drop table {tablename}'
+                db.execute(query)
+        if not db.engine.has_table(tablename):
             logger.debug(f'{self.c} Table {tablename} will be created')
 
             columns = []

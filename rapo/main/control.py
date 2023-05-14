@@ -170,6 +170,9 @@ class Control():
         self.parser = Parser(self)
         self.executor = Executor(self)
 
+        self.process = None
+        self.handler = None
+
         self.process_id = process_id
         if self.result:
             self.start_date = self.result['start_date']
@@ -466,39 +469,26 @@ class Control():
         """Run control in an ordinary way."""
         logger.debug(f'{self} Running control...')
         if self._initiate():
-            if self._prerun_hook():
-                if self._start():
-                    if self._progress():
-                        if self._finish():
-                            if self._done():
-                                self._postrun_hook()
-            else:
-                self._terminate()
-                self._cancel()
+            self._resume()
 
-    def process(self):
+    def launch(self):
         """Run control as a separate accompanied stoppable process."""
         logger.debug(f'{self} Running control...')
-        if self._initiate() is True:
-            self._resume()
+        if self._initiate():
+            self._spawn()
 
     def resume(self):
         """Resume initiated control run."""
-        if self.initiated:
-            if self._prerun_hook():
-                if self._start():
-                    if self._progress():
-                        if self._finish():
-                            if self._done():
-                                self._postrun_hook()
-            else:
-                self._terminate()
-                self._cancel()
+        self._resume()
+
+    def wait(self):
+        """Wait untill control finishes."""
+        return self._wait()
 
     def cancel(self):
         """Cancel control run."""
         if self.working:
-            self._terminate()
+            self._deinitiate()
 
     def delete(self):
         """Delete control results."""
@@ -527,31 +517,68 @@ class Control():
             self.process_id = int(result.inserted_primary_key[0])
         except Exception:
             logger.error()
-            return self._exit()
+            return self._escape()
         else:
             logger.debug(f'{self} New record in {db.tables.log} created')
             logger.info(f'{self} Control owns process ID {self.process_id}')
             logger.info(f'{self} Control initiated')
             return self._continue()
 
+    def _deinitiate(self):
+        logger.info(f'{self} Deinitiating control...')
+        try:
+            self.status = None
+            self._update(status=self.status)
+        except Exception:
+            logger.error()
+        else:
+            logger.info(f'{self} Control deinitiated')
+
     def _resume(self):
+        if self.initiated:
+            if self._prerun_hook():
+                if self._start():
+                    if self._progress():
+                        if self._finish():
+                            if self._done():
+                                self._postrun_hook()
+
+    def _spawn(self):
+        logger.debug(f'{self} Spawning new process for the control...')
         context = mp.get_context('spawn')
-        process = context.Process(target=self.resume)
+        process = context.Process(name=self, target=self._resume)
         process.start()
+        handler = th.Thread(name=f'{self}-Handler', target=self._handle)
+        handler.start()
         logger.info(f'{self} Running as process on PID {process.pid}')
-        while process.is_alive():
-            logger.debug(f'{self} PID {process.pid} is alive')
-            tm.sleep(5)
+        self.process, self.handler = process, handler
+
+    def _handle(self):
+        process = self.process
+        while process.is_alive() and self.status == 'P':
             control = Control(process_id=self.process_id)
-            if control.status is None:
-                logger.info(f'{self} Process termination request received')
-                process.terminate()
-                logger.info(f'{self} Process PID {process.pid} terminated')
+            if not control.status:
+                logger.info(f'{self} Control cancelation request received')
+                self._terminate()
                 self._cancel()
-                continue
-        logger.debug(f'{self} PID {process.pid} returns {process.exitcode}')
-        process.join()
-        self.__dict__.update(control.__dict__)
+            tm.sleep(5)
+            self.__dict__.update(control.__dict__)
+
+    def _wait(self):
+        process = self.process
+        pid = process.pid
+        logger.debug(f'{self} Waiting for process at PID {pid}...')
+        while process.is_alive():
+            tm.sleep(1)
+        result_code = process.exitcode
+        logger.debug(f'{self} Process at PID {pid} returns {result_code}')
+
+    def _terminate(self):
+        logger.info(f'{self} Terminating process of the control...')
+        process = self.process
+        pid = process.pid
+        process.terminate()
+        logger.info(f'{self} Process at PID {pid} terminated')
 
     def _start(self):
         logger.info(f'{self} Starting control...')
@@ -566,7 +593,7 @@ class Control():
                 self.source_table_b = self.parser.parse_source_table_b()
         except Exception:
             logger.error()
-            return self._exit()
+            return self._escape()
         else:
             logger.info(f'{self} Control started at {self.start_date}')
             return self._continue()
@@ -580,7 +607,7 @@ class Control():
             self._save()
         except Exception:
             logger.error()
-            return self._exit()
+            return self._escape()
         else:
             return self._continue()
 
@@ -592,7 +619,7 @@ class Control():
             self.executor.drop_temporary_tables()
         except Exception:
             logger.error()
-            return self._exit()
+            return self._escape()
         else:
             logger.info(f'{self} Control finished')
             return self._continue()
@@ -616,7 +643,7 @@ class Control():
             self._update(status=self.status, end_date=self.end_date)
         except Exception:
             logger.error()
-            return self._exit()
+            return self._escape()
         else:
             logger.info(f'{self} ended at {self.end_date}')
             return self._continue()
@@ -634,7 +661,7 @@ class Control():
     def _continue(self):
         return True
 
-    def _exit(self):
+    def _escape(self):
         self._with_error = True
         self._all_errors.append(sys.exc_info())
         self._update(text_error=self.text_error)
@@ -753,16 +780,6 @@ class Control():
                 if self.errors or 0 > 0:
                     self.executor.save_mismatches()
         logger.info(f'{self} Results saved')
-
-    def _terminate(self):
-        logger.info(f'{self} Creating process termination request...')
-        try:
-            self.status = None
-            self._update(status=self.status)
-        except Exception:
-            logger.error()
-        else:
-            logger.info(f'{self} Process termination request created')
 
     def _delete(self):
         logger.info(f'{self} Deleting results...')

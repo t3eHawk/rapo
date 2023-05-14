@@ -35,7 +35,47 @@ def run_control():
     date_from = request.args.get('date_from')
     date_to = request.args.get('date_to')
     control = Control(name, date_from=date_from, date_to=date_to, date=date)
-    control.process()
+    control.launch()
+    return OK
+
+
+@app.route('/api/cancel-control', methods=['POST'])
+@auth.login_required
+def cancel_control():
+    """Cancel running control."""
+    request = flask.request
+    process_id = int(request.args['id'])
+    control = Control(process_id=process_id)
+    control.cancel()
+    return OK
+
+
+@app.route('/api/revoke-control-run', methods=['DELETE'])
+@auth.login_required
+def revoke_control_run():
+    """Revoke patricular control run."""
+    request = flask.request
+    process_id = int(request.args['id'])
+    control = Control(process_id=process_id)
+    control.revoke()
+    return OK
+
+
+@app.route('/api/get-running-controls')
+@auth.login_required
+def get_running_controls():
+    """Get list of currently running controls in JSON."""
+    rows = reader.read_running_controls()
+    response = flask.jsonify(rows)
+    return response
+
+
+@app.route('/api/get-control-run')
+@auth.login_required
+def get_control_run():
+    request = flask.request
+    process_id = request.args['process_id']
+    control = Control(process_id=process_id)
     response = flask.jsonify(name=control.name,
                              date_from=control.date_from,
                              date_to=control.date_to,
@@ -56,34 +96,3 @@ def run_control():
                              error_level_a=control.error_level_a,
                              error_level_b=control.error_level_b)
     return response
-
-
-@app.route('/api/cancel-control', methods=['POST'])
-@auth.login_required
-def cancel_control():
-    """Cancel running control."""
-    request = flask.request
-    process_id = int(request.args['id'])
-    control = Control(process_id=process_id)
-    control.cancel()
-    return OK
-
-
-@app.route('/api/get-running-controls')
-@auth.login_required
-def get_running_controls():
-    """Get list of currently running controls in JSON."""
-    rows = reader.read_running_controls()
-    response = flask.jsonify(rows)
-    return response
-
-
-@app.route('/api/revoke-control-run', methods=['DELETE'])
-@auth.login_required
-def revoke_control_run():
-    """Revoke patricular control run."""
-    request = flask.request
-    process_id = int(request.args['id'])
-    control = Control(process_id=process_id)
-    control.revoke()
-    return OK

@@ -61,7 +61,7 @@ class Database():
             return string
 
         def _prepare(self, query):
-            query = self._to_string(query)
+            query = self._compile(query)
             query = self._separate(query)
             return query
 
@@ -71,7 +71,7 @@ class Database():
                                 reindent_aligned=True)
             return result
 
-        def _to_string(self, query):
+        def _compile(self, query):
             if isinstance(query, str):
                 return query
             else:

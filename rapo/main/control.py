@@ -1,12 +1,14 @@
 """Contains RAPO control interface."""
 
-import datetime as dt
-import json
-import multiprocessing as mp
 import sys
 import threading as th
-import time as tm
+import multiprocessing as mp
 import traceback as tb
+
+import re
+import json
+import time as tm
+import datetime as dt
 
 import sqlalchemy as sa
 
@@ -324,6 +326,11 @@ class Control():
     def source_date_field_b(self):
         """Get control data source B date field."""
         return utils.to_lower(self.config['source_date_field_b'])
+
+    @property
+    def result_column(self):
+        """Get object representing result column."""
+        return self.parser.parse_result_column()
 
     @property
     def status(self):
@@ -1037,8 +1044,11 @@ class Parser():
         select : sqlalchemy.Select
         """
         table = self.control.source_table
+        result_value = self.control.result_column
+        literals = [result_value]
         date_field = self.control.source_date_field
-        select = self._parse_select(table, date_field=date_field)
+        select = self._parse_select(table, literals=literals,
+                                    date_field=date_field)
         return select
 
     def parse_select_a(self):
@@ -1065,10 +1075,11 @@ class Parser():
         select = self._parse_select(table, date_field=date_field)
         return select
 
-    def _parse_select(self, table, date_field=None):
+    def _parse_select(self, table, literals=None, date_field=None):
         logger.debug(f'{self.c} Parsing {table} select...')
-        select = table.select()
-        if isinstance(date_field, str) is True:
+        literals = literals if isinstance(literals, list) else []
+        select = sa.select([*table.columns, *literals])
+        if isinstance(date_field, str):
             column = table.c[date_field]
 
             datefmt = '%Y-%m-%d %H:%M:%S'
@@ -1080,7 +1091,7 @@ class Parser():
             date_to = sa.func.to_date(date_to, datefmt)
 
             select = select.where(column.between(date_from, date_to))
-            logger.debug(f'{self.c} {table} select parsed')
+        logger.debug(f'{self.c} {table} select parsed')
         return select
 
     def parse_output_names(self):
@@ -1156,6 +1167,59 @@ class Parser():
                 table = db.table(name)
                 tables.append(table)
         return tables
+
+    def parse_case_config(self):
+        """Get case mapping taken from the configuration table.
+
+        Returns
+        -------
+        config : dict or None
+            Dictionary with case mapping.
+        """
+        logger.debug(f'{self.c} Parsing case configuration...')
+        string = self.control.config['case_config']
+        if string:
+            custom_config = json.loads(string)
+            final_config = {}
+            for key, value in custom_config.items():
+                i = int(key)
+                final_config[i] = value
+            logger.debug(f'{self.c} Case configuration parsed')
+            return final_config
+        else:
+            logger.debug(f'{self.c} Case configuration not found')
+
+    def parse_result_column(self):
+        """Get result column based on result statement and case configuration.
+
+        Returns
+        -------
+        column : sqlalchemy.Label or None
+            Object representing result column.
+        """
+        logger.debug(f'{self.c} Parsing result column...')
+        custom_statement = self.control.config['result_config']
+        if custom_statement:
+            case_config = self.parse_case_config()
+            replaces = []
+            pattern = r'THEN\s+\d+|ELSE\s+\d+'
+            matches = re.findall(pattern, custom_statement, re.IGNORECASE)
+            for match in matches:
+                keyword, result = re.split(r'\s+', match)
+                case_id = int(result)
+                case_value = case_config[case_id]
+                replace = f'{keyword} \'{case_value}\''
+                replaces.append([match, replace])
+            final_statement = custom_statement
+            for old, new in replaces:
+                final_statement = final_statement.replace(old, new)
+            final_statement = db.formatter(final_statement)
+            label = 'rapo_result_value'
+            column = sa.literal_column(final_statement).label(label)
+            logger.debug(f'{self.c} Result column parsed')
+            return column
+        else:
+            logger.debug(f'{self.c} Result column not found')
 
     def parse_analyze_error_config(self):
         """Get analyze error configuration.

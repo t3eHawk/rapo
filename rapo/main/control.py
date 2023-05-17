@@ -440,6 +440,12 @@ class Control():
             return []
 
     @property
+    def error_sql(self):
+        """Get control error SQL expression."""
+        if self.type == 'ANL':
+            return self.parser.parse_analyze_error_sql()
+
+    @property
     def output_columns(self):
         """Get control output column configuration."""
         return self.parser.parse_output_columns()
@@ -1097,8 +1103,8 @@ class Parser():
         literals = literals if isinstance(literals, list) else []
         select = sa.select([*table.columns, *literals])
         if isinstance(where, str):
-            expression = sa.text(where)
-            select = select.where(expression)
+            clause = sa.text(where)
+            select = select.where(clause)
         if isinstance(date_field, str):
             column = table.c[date_field]
 
@@ -1264,31 +1270,56 @@ class Parser():
 
         Returns
         -------
-        config : list
+        config : list or None
             List with dictionaries where presented all keys for discrapancies.
         """
         logger.debug(f'{self.c} Parsing error configuration...')
-        raw = self.control.config['error_config']
-        config = []
-        for item in json.loads(raw or '[]'):
-            connexion = item.get('connexion', 'and').upper()
-            column = item.get('column', '').lower()
-            column_a = item.get('column_a', '').lower()
-            column_b = item.get('column_b', '').lower()
-            relation = item.get('relation', '<>').upper()
-            value = item.get('value')
-            is_column = item.get('is_column', False)
+        string = self.control.config['error_config']
+        if utils.is_json(string):
+            config = self._parse_json_filter(string)
+            logger.debug(f'{self.c} Error configuration parsed')
+            return config
+        else:
+            logger.debug(f'{self.c} Error configuration not found')
 
-            config.append(
-                {'connexion': connexion,
-                 'column': column or None,
-                 'column_a': column_a or None,
-                 'column_b': column_b or None,
-                 'relation': relation,
-                 'value': value.lower() if is_column is True else value,
-                 'is_column': is_column})
-        logger.debug(f'{self.c} Error configuration parsed')
-        return config
+    def parse_analyze_error_sql(self):
+        """Prepare analyze error SQL expression.
+
+        Returns
+        -------
+        expression : str or None
+            String with SQL expression to select discrapancies.
+        """
+        logger.debug(f'{self.c} Parsing error SQL...')
+        string = self.control.config['error_config']
+        if utils.is_sql(string):
+            expression = self._parse_sql_filter(string)
+            logger.debug(f'{self.c} Error SQL parsed')
+            return expression
+        elif utils.is_json(string):
+            table = self.control.input_table
+            expressions = []
+            config = self.parse_analyze_error_config()
+            for i in config:
+                expression = []
+                connexion = i['connexion']
+                if len(expressions) > 0:
+                    expression.append(connexion)
+                column = str(table.c[i['column']])
+                expression.append(column)
+                relation = i['relation']
+                expression.append(relation)
+                value = i['value']
+                is_column = i['is_column']
+                value = str(table.c[value]) if is_column else value
+                expression.append(value)
+                expression = ' '.join(expression)
+                expressions.append(expression)
+            expression = '\n'.join(expressions)
+            logger.debug(f'{self.c} Error SQL parsed using configuration')
+            return expression
+        else:
+            logger.debug(f'{self.c} Error SQL not found')
 
     def parse_reconciliation_rule_config(self):
         """Get control rule configuration.
@@ -1329,6 +1360,30 @@ class Parser():
             config.append(new)
         logger.debug(f'{self.c} Error configuration parsed')
         return config
+
+    def _parse_json_filter(self, string):
+        config = []
+        for item in json.loads(string or '[]'):
+            connexion = item.get('connexion', 'and').upper()
+            column = item.get('column', '').lower()
+            column_a = item.get('column_a', '').lower()
+            column_b = item.get('column_b', '').lower()
+            relation = item.get('relation', '<>').upper()
+            value = item.get('value')
+            is_column = item.get('is_column', False)
+
+            config.append(
+                {'connexion': connexion,
+                 'column': column or None,
+                 'column_a': column_a or None,
+                 'column_b': column_b or None,
+                 'relation': relation,
+                 'value': value.lower() if is_column is True else value,
+                 'is_column': is_column})
+        return config
+
+    def _parse_sql_filter(self, string):
+        return string
 
     def parse_output_columns(self):
         """Get control output columns.
@@ -1503,26 +1558,10 @@ class Executor():
                 column = input_table.c[name]
                 columns.append(column)
             select = sa.select(columns)
-        texts = []
-        config = self.control.error_config
-        for item in config:
-            text = []
-            connexion = item['connexion']
-            if len(texts) > 0:
-                text.append(connexion)
-            column = str(input_table.c[item['column']])
-            text.append(column)
-            relation = item['relation']
-            text.append(relation)
-            value = item['value']
-            is_column = item['is_column']
-            value = str(input_table.c[value]) if is_column is True else value
-            text.append(value)
-            text = ' '.join(text)
-            texts.append(text)
-        select = select.where(sa.text('\n'.join(texts)))
 
         tablename = f'rapo_temp_err_{self.control.process_id}'
+        clause = sa.text(self.control.error_sql)
+        select = select.where(clause)
         select = select.compile(bind=db.engine, compile_kwargs=db.ckwargs)
         ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
         text = db.formatter(ctas)

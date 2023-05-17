@@ -303,6 +303,11 @@ class Control():
         return utils.to_lower(self.config['source_name'])
 
     @property
+    def source_filter(self):
+        """Get control data source filter clause."""
+        return self.parser.parse_filter()
+
+    @property
     def source_date_field(self):
         """Get control data source date field."""
         return utils.to_lower(self.config['source_date_field'])
@@ -313,6 +318,11 @@ class Control():
         return utils.to_lower(self.config['source_name_a'])
 
     @property
+    def source_filter_a(self):
+        """Get control data source A filter clause."""
+        return self.parser.parse_filter_a()
+
+    @property
     def source_date_field_a(self):
         """Get control data source A date field."""
         return utils.to_lower(self.config['source_date_field_a'])
@@ -321,6 +331,11 @@ class Control():
     def source_name_b(self):
         """Get control data source B name."""
         return utils.to_lower(self.config['source_name_b'])
+
+    @property
+    def source_filter_b(self):
+        """Get control data source B filter clause."""
+        return self.parser.parse_filter_b()
 
     @property
     def source_date_field_b(self):
@@ -1044,10 +1059,10 @@ class Parser():
         select : sqlalchemy.Select
         """
         table = self.control.source_table
-        result_value = self.control.result_column
-        literals = [result_value]
+        literals = [self.control.result_column]
+        where = self.control.source_filter
         date_field = self.control.source_date_field
-        select = self._parse_select(table, literals=literals,
+        select = self._parse_select(table, literals=literals, where=where,
                                     date_field=date_field)
         return select
 
@@ -1059,8 +1074,9 @@ class Parser():
         select : sqlalchemy.Select
         """
         table = self.control.source_table_a
+        where = self.control.source_filter_a
         date_field = self.control.source_date_field_a
-        select = self._parse_select(table, date_field=date_field)
+        select = self._parse_select(table, where=where, date_field=date_field)
         return select
 
     def parse_select_b(self):
@@ -1071,14 +1087,18 @@ class Parser():
         select : sqlalchemy.Select
         """
         table = self.control.source_table_b
+        where = self.control.source_filter_b
         date_field = self.control.source_date_field_b
-        select = self._parse_select(table, date_field=date_field)
+        select = self._parse_select(table, where=where, date_field=date_field)
         return select
 
-    def _parse_select(self, table, literals=None, date_field=None):
+    def _parse_select(self, table, literals=None, where=None, date_field=None):
         logger.debug(f'{self.c} Parsing {table} select...')
         literals = literals if isinstance(literals, list) else []
         select = sa.select([*table.columns, *literals])
+        if isinstance(where, str):
+            expression = sa.text(where)
+            select = select.where(expression)
         if isinstance(date_field, str):
             column = table.c[date_field]
 
@@ -1093,6 +1113,24 @@ class Parser():
             select = select.where(column.between(date_from, date_to))
         logger.debug(f'{self.c} {table} select parsed')
         return select
+
+    def parse_filter(self):
+        """Get SQL-like expression used to filter the data source.
+        """
+        return self._parse_filter('source_filter')
+
+    def parse_filter_a(self):
+        """Get SQL-like expression used to filter the data source A.
+        """
+        return self._parse_filter('source_filter_a')
+
+    def parse_filter_b(self):
+        """Get SQL-like expression used to filter the data source B.
+        """
+        return self._parse_filter('source_filter_b')
+
+    def _parse_filter(self, filter_name):
+        return self.config[filter_name]
 
     def parse_output_names(self):
         """Get list with necessary output table names.

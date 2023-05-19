@@ -64,6 +64,7 @@ create table rapo_config (
   need_hook           text default 'Y' not null,
   need_prerun_hook    text default 'N' not null,
   need_postrun_hook   text default 'N' not null,
+  preparation_sql     text,
   prerequisite_sql    text,
   status              text default 'N' not null,
   updated_date        date default (datetime('now', 'localtime')) not null,

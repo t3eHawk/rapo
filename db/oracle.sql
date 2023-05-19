@@ -67,6 +67,7 @@ create table rapo_config (
   need_hook           varchar2(1) default 'Y' not null,
   need_prerun_hook    varchar2(1) default 'N' not null,
   need_postrun_hook   varchar2(1) default 'N' not null,
+  preparation_sql     clob,
   prerequisite_sql    clob,
   status              varchar2(1) default 'N' not null,
   updated_date        date default sysdate not null,

@@ -519,6 +519,10 @@ class Control():
         """Get the result of the prerequisite statement."""
         return self._prerequisite()
 
+    def prepare(self):
+        """Execute control preparation SQL scripts."""
+        self._prepare()
+
     def resume(self):
         """Resume initiated control run."""
         self._resume()
@@ -593,26 +597,50 @@ class Control():
                 return self._escape()
             else:
                 return self._continue()
+        return self._continue()
+
+    def _prepare(self):
+        statement = self.parser.parse_preparation_statement()
+        if statement:
+            logger.info(f'{self} Running control preparation SQL scripts...')
+            try:
+                result = db.execute(statement)
+                rowcount = result.rowcount
+                logger.info(f'{self} Control preparation SQL scripts '
+                            f'successfully performed returning {rowcount}')
+            except Exception:
+                logger.error()
+                return self._escape()
+            else:
+                return self._continue()
+        return self._continue()
 
     def _resume(self):
         if self.initiated:
-            if self._prerequisite():
-                if self._prerun_hook():
-                    if self._start():
-                        if self._progress():
-                            if self._finish():
-                                if self._done():
-                                    self._postrun_hook()
-            else:
+            if self._prepare():
+                if self._prerequisite():
+                    if self._prerun_hook():
+                        if self._start():
+                            if self._progress():
+                                if self._finish():
+                                    if self._done():
+                                        self._postrun_hook()
                 self._do_not_resume()
+            self._can_not_prepare()
 
     def _do_not_resume(self):
         if not self.prerequisite_value:
             logger.info(f'{self} Control will not be resumed '
                         'due to a prerequisite check')
             message = ('Control execution stopped because the '
-                       'PREREQUISITE check not passed.')
+                       'PREREQUISITE check not passed')
             self._update(text_message=message)
+
+    def _can_not_prepare(self):
+        logger.info(f'{self} Control will not be resumed '
+                    'due to a preparation failure')
+        message = ('Control execution stopped because the PREPARATION failed')
+        self._update(text_message=message)
 
     def _spawn(self):
         logger.debug(f'{self} Spawning new process for the control...')
@@ -1003,7 +1031,20 @@ class Parser():
         """
         custom_statement = self.control.config['prerequisite_sql']
         if custom_statement:
-            final_statement = db.formatter()
+            final_statement = db.formatter(custom_statement)
+            return final_statement
+
+    def parse_preparation_statement(self):
+        """Get preparation statement taken from the configuration table.
+
+        Returns
+        -------
+        final_statement : str or None
+            Formatted SQL query that must be performed before the control.
+        """
+        custom_statement = self.control.config['preparation_sql']
+        if custom_statement:
+            final_statement = db.formatter(custom_statement)
             return final_statement
 
     def parse_source_table(self):

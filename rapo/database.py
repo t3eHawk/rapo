@@ -191,6 +191,28 @@ class Database():
         table = sa.Table(name, meta, autoload=True, autoload_with=self.engine)
         return table
 
+    def drop(self, table_name):
+        """Drop database table by name.
+
+        Parameters
+        ----------
+        table_name : str
+            Name of the database table to be dropped.
+        """
+        query = f'drop table {table_name}'
+        self.execute(query)
+
+    def truncate(self, table_name):
+        """Clean database table by name.
+
+        Parameters
+        ----------
+        table_name : str
+            Name of the database table to be cleaned.
+        """
+        query = f'truncate table {table_name}'
+        self.execute(query)
+
     def format(self, statement):
         """Format given SQL statement through the formatter.
 

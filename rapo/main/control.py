@@ -931,11 +931,7 @@ class Control():
             for table in self.output_tables:
                 repr = f'[{self.name}]'
                 logger.info(f'{repr} Deleting all results in {table}...')
-                query = f'truncate table {table.name}'
-                text = db.formatter(query)
-                logger.debug(f'{self} Deleting from {table} '
-                             f'with query:\n{text}')
-                db.execute(query)
+                db.truncate(table.name)
                 logger.info(f'{repr} Results in {table} deleted')
         else:
             outdated_results = list(self.parser.parse_outdated_results())
@@ -1952,9 +1948,12 @@ class Executor():
     def delete_output_records(self):
         """Delete records saved as control results in DB table."""
         for table in self.control.output_tables:
-            id = table.c.rapo_process_id
-            delete = table.delete().where(id == self.control.process_id)
-            db.execute(delete)
+            if self.control.with_deletion:
+                db.truncate(table)
+            else:
+                id = table.c.rapo_process_id
+                delete = table.delete().where(id == self.control.process_id)
+                db.execute(delete)
 
     def prepare_output_table(self):
         """Check RAPO_RESULT and create it at initial control run.
@@ -1968,10 +1967,9 @@ class Executor():
         if self.control.with_deletion or self.control.with_drop:
             if db.engine.has_table(tablename):
                 if self.control.with_deletion:
-                    query = f'truncate table {tablename}'
+                    db.truncate(tablename)
                 elif self.control.with_drop:
-                    query = f'drop table {tablename}'
-                db.execute(query)
+                    db.drop(tablename)
         if not db.engine.has_table(tablename):
             logger.debug(f'{self.c} Table {tablename} will be created')
 

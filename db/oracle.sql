@@ -23,6 +23,18 @@ create table rapo_ref_subtypes (
 insert into rapo_ref_subtypes values ('REC', 'MA', 'Matching');
 commit;
 
+create table rapo_ref_cases (
+  case_type varchar2(15) not null,
+  constraint rapo_ref_subtypes_pk primary key (case_type)
+);
+insert into rapo_ref_cases values ('Normal');
+insert into rapo_ref_cases values ('Info');
+insert into rapo_ref_cases values ('Error');
+insert into rapo_ref_cases values ('Warning');
+insert into rapo_ref_cases values ('Discrepancy');
+insert into rapo_ref_cases values ('Incident');
+commit;
+
 create table rapo_ref_engines (
   engine_code varchar2(2) not null,
   engine_desc varchar2(30) not null,

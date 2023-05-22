@@ -191,5 +191,35 @@ class Database():
         table = sa.Table(name, meta, autoload=True, autoload_with=self.engine)
         return table
 
+    def format(self, statement):
+        """Format given SQL statement through the formatter.
+
+        Parameters
+        ----------
+        statement : str
+            Initial SQL statement.
+
+        Returns
+        -------
+        statement : str
+            Formatted SQL statement.
+        """
+        return self.formatter(statement)
+
+    def compile(self, obj):
+        """Compile given SQL object into a string using the engine.
+
+        Parameters
+        ----------
+        obj : sqlalchemy statement
+            Initial SQL object.
+
+        Returns
+        -------
+        statement : str
+            Compiled SQL statement.
+        """
+        return obj.compile(bind=self.engine, compile_kwargs=self.ckwargs)
+
 
 db = Database()

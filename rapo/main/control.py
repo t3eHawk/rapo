@@ -17,6 +17,8 @@ from ..logger import logger
 from ..reader import reader
 from ..utils import utils
 
+from .case import NORMAL, INFO, ERROR, WARNING, DISCREPANCY, INCIDENT
+
 
 class Control():
     """Represents certain RAPO control and acts like its API.
@@ -343,9 +345,14 @@ class Control():
         return utils.to_lower(self.config['source_date_field_b'])
 
     @property
-    def result_column(self):
-        """Get object representing result column."""
-        return self.parser.parse_result_column()
+    def result_columns(self):
+        """Get object representing result columns."""
+        return self.parser.parse_result_columns()
+
+    @property
+    def process_column(self):
+        """Get process identification column."""
+        return self.parser.parse_process_column()
 
     @property
     def status(self):
@@ -420,6 +427,13 @@ class Control():
         return self.parser.parse_temp_tables()
 
     @property
+    def has_cases(self):
+        """Identify whether control is case-configured or not."""
+        if self.config['result_config'] and self.config['case_config']:
+            return True
+        return False
+
+    @property
     def rule_config(self):
         """Get control match configuration."""
         if self.type == 'ANL':
@@ -428,6 +442,16 @@ class Control():
             return self.parser.parse_reconciliation_rule_config()
         elif self.type == 'REP':
             return []
+
+    @property
+    def case_config(self):
+        """Get control case configuration."""
+        return self.parser.parse_case_config()
+
+    @property
+    def result_config(self):
+        """Get control result configuration."""
+        return self.parser.parse_result_config()
 
     @property
     def error_config(self):
@@ -459,6 +483,11 @@ class Control():
     def output_columns_b(self):
         """Get control output B column configuration."""
         return self.parser.parse_output_columns_b()
+
+    @property
+    def mandatory_columns(self):
+        """Get control mandatory output columns configuration."""
+        return self.parser.parse_mandatory_columns()
 
     @property
     def need_a(self):
@@ -1106,7 +1135,7 @@ class Parser():
         select : sqlalchemy.Select
         """
         table = self.control.source_table
-        literals = [self.control.result_column]
+        literals = self.control.result_columns
         where = self.control.source_filter
         date_field = self.control.source_date_field
         select = self._parse_select(table, literals=literals, where=where,
@@ -1264,47 +1293,100 @@ class Parser():
         logger.debug(f'{self.c} Parsing case configuration...')
         string = self.control.config['case_config']
         if string:
+            case_list = [NORMAL, INFO, ERROR, WARNING, DISCREPANCY, INCIDENT]
             custom_config = json.loads(string)
             final_config = {}
-            for key, value in custom_config.items():
-                i = int(key)
-                final_config[i] = value
+            for custom_record in custom_config:
+                i = custom_record['case_id']
+                case_id = custom_record['case_id']
+                case_value = custom_record['case_value']
+                case_type = custom_record.get('case_type')
+                case_description = custom_record.get('case_description')
+                final_record = {
+                    'case_id': case_id,
+                    'case_value': case_value,
+                    'case_type': case_type if case_type in case_list else None,
+                    'case_description': case_description
+                }
+                final_config[i] = final_record
             logger.debug(f'{self.c} Case configuration parsed')
             return final_config
         else:
             logger.debug(f'{self.c} Case configuration not found')
 
-    def parse_result_column(self):
-        """Get result column based on result statement and case configuration.
+    def parse_result_config(self):
+        """Get main result statement taken from the configuration table.
 
         Returns
         -------
-        column : sqlalchemy.Label or None
+        config : str or None
+            SQL-like logical expression with a result mapping.
+        """
+        logger.debug(f'{self.c} Parsing result configuration...')
+        string = self.control.config['result_config']
+        if string:
+            custom_config = self.control.config['result_config']
+            final_config = db.formatter(custom_config)
+            logger.debug(f'{self.c} Result configuration parsed')
+            return final_config
+        else:
+            logger.debug(f'{self.c} Result configuration not found')
+
+    def parse_result_columns(self):
+        """Get result columns based on result statement and case configuration.
+
+        Returns
+        -------
+        columns : List of sqlalchemy columns or None
             Object representing result column.
         """
-        logger.debug(f'{self.c} Parsing result column...')
+        logger.debug(f'{self.c} Parsing result columns...')
         custom_statement = self.control.config['result_config']
         if custom_statement:
+            columns = []
             case_config = self.parse_case_config()
+
             replaces = []
             pattern = r'THEN\s+\d+|ELSE\s+\d+'
             matches = re.findall(pattern, custom_statement, re.IGNORECASE)
             for match in matches:
                 keyword, result = re.split(r'\s+', match)
                 case_id = int(result)
-                case_value = case_config[case_id]
-                replace = f'{keyword} \'{case_value}\''
-                replaces.append([match, replace])
-            final_statement = custom_statement
-            for old, new in replaces:
-                final_statement = final_statement.replace(old, new)
-            final_statement = db.formatter(final_statement)
-            label = 'rapo_result_value'
-            column = sa.literal_column(final_statement).label(label)
-            logger.debug(f'{self.c} Result column parsed')
-            return column
+                case_value = case_config[case_id]['case_value']
+                case_type = case_config[case_id]['case_type']
+
+                replace = [match, {}]
+                replace[1]['key'] = f'{keyword} {case_id}'
+                replace[1]['value'] = f'{keyword} \'{case_value}\''
+                replace[1]['type'] = f'{keyword} \'{case_type}\''
+                replaces.append(replace)
+
+            columns = []
+            for field in ['key', 'value', 'type']:
+                field_name = f'rapo_result_{field}'
+                final_statement = custom_statement
+                for replace in replaces:
+                    old = replace[0]
+                    new = replace[1][field]
+                    final_statement = final_statement.replace(old, new)
+                final_statement = db.formatter(final_statement)
+                column = sa.literal_column(final_statement).label(field_name)
+                columns.append(column)
+            logger.debug(f'{self.c} Result columns parsed')
+            return columns
         else:
-            logger.debug(f'{self.c} Result column not found')
+            logger.debug(f'{self.c} Result columns not found')
+
+    def parse_process_column(self):
+        """Get process identification and description column.
+
+        Returns
+        -------
+        columns : sqlalchemy column
+            Object representing process identification column.
+        """
+        column = sa.literal(self.control.process_id).label('rapo_process_id')
+        return column
 
     def parse_analyze_error_config(self):
         """Get analyze error configuration.
@@ -1358,6 +1440,14 @@ class Parser():
                 expressions.append(expression)
             expression = '\n'.join(expressions)
             logger.debug(f'{self.c} Error SQL parsed using configuration')
+            return expression
+        elif not string and self.control.has_cases:
+            table = self.control.input_table
+            result_type = table.c.rapo_result_type
+            target_types = [INFO, ERROR, WARNING, DISCREPANCY, INCIDENT]
+            clause = sa.or_(result_type.in_(target_types),
+                            result_type.is_(None))
+            expression = db.compile(clause)
             return expression
         else:
             logger.debug(f'{self.c} Error SQL not found')
@@ -1494,6 +1584,21 @@ class Parser():
                 logger.debug(f'{self.c} Output columns was not configured')
                 return None
 
+    def parse_mandatory_columns(self):
+        """Get control mandatory columns."""
+        logger.debug(f'{self.c} Parsing mandatory columns...')
+        if self.control.has_cases:
+            columns = []
+            fields = ['key', 'value', 'type']
+            for field in fields:
+                column_name = f'rapo_result_{field}'
+                column = {'column': column_name}
+                columns.append(column)
+            logger.debug(f'{self.c} Mandatory columns parsed')
+            return columns
+        else:
+            logger.debug(f'{self.c} Mandatory columns not defined')
+
     def parse_outdated_results(self):
         """Create list with tables and IDs of outdated control results."""
         log = db.tables.log
@@ -1590,11 +1695,12 @@ class Executor():
         logger.debug(f'{self.c} Analyzing...')
         input_table = self.control.input_table
         output_columns = self.control.output_columns
+        mandatory_columns = self.control.mandatory_columns
         if output_columns is None or len(output_columns) == 0:
             select = input_table.select()
         else:
             columns = []
-            for output_column in output_columns:
+            for output_column in [*output_columns, *mandatory_columns]:
                 name = output_column['column']
                 column = input_table.c[name]
                 columns.append(column)
@@ -1603,7 +1709,7 @@ class Executor():
         tablename = f'rapo_temp_err_{self.control.process_id}'
         clause = sa.text(self.control.error_sql)
         select = select.where(clause)
-        select = select.compile(bind=db.engine, compile_kwargs=db.ckwargs)
+        select = db.compile(select)
         ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
         text = db.formatter(ctas)
         logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
@@ -1668,7 +1774,7 @@ class Executor():
             select = select.where(column_a == column_b)
 
         tablename = f'rapo_temp_md_{self.control.process_id}'
-        select = select.compile(bind=db.engine, compile_kwargs=db.ckwargs)
+        select = db.compile(select)
         ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
         text = db.formatter(ctas)
         logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
@@ -1733,7 +1839,7 @@ class Executor():
             select = select.where(column_a != column_b)
 
         tablename = f'rapo_temp_nmd_{self.control.process_id}'
-        select = select.compile(bind=db.engine, compile_kwargs=db.ckwargs)
+        select = db.compile(select)
         ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
         text = db.formatter(ctas)
         logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
@@ -1817,9 +1923,8 @@ class Executor():
         """Save defined results as output records."""
         logger.debug(f'{self.c} Start saving...')
         table = self.control.result_table
-        process_id = sa.literal(self.control.process_id)
-        select = sa.select([*table.columns,
-                            process_id.label('rapo_process_id')])
+        process_id = self.control.process_column
+        select = sa.select([*table.columns, process_id])
         table = self.prepare_output_table()
         insert = table.insert().from_select(table.columns, select)
         db.execute(insert)
@@ -1829,9 +1934,8 @@ class Executor():
         """Save defined errors as output records."""
         logger.debug(f'{self.c} Start saving...')
         table = self.control.error_table
-        process_id = sa.literal(self.control.process_id)
-        select = sa.select([*table.columns,
-                            process_id.label('rapo_process_id')])
+        process_id = self.control.process_column
+        select = sa.select([*table.columns, process_id])
         table = self.prepare_output_table()
         insert = table.insert().from_select(table.columns, select)
         db.execute(insert)
@@ -1902,11 +2006,11 @@ class Executor():
                         column = table.c[name]
                     columns.append(column)
 
-            process_id = sa.literal(self.control.process_id)
-            columns = [*columns, process_id.label('rapo_process_id')]
+            process_id = self.control.process_column
+            columns = [*columns, process_id]
             select = sa.select(columns)
             select = select.where(sa.literal(1) == sa.literal(0))
-            select = select.compile(bind=db.engine, compile_kwargs=db.ckwargs)
+            select = db.compile(select)
             ctas = f'CREATE TABLE {tablename} AS\n{select}'
             index = (f'CREATE INDEX {tablename}_rapo_process_id_ix '
                      f'ON {tablename}(rapo_process_id) COMPRESS')
@@ -1958,7 +2062,7 @@ class Executor():
 
     def _fetch_records_to_table(self, select, tablename):
         logger.debug(f'{self.c} Start fetching...')
-        select = select.compile(bind=db.engine, compile_kwargs=db.ckwargs)
+        select = db.compile(select)
         ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
         text = db.formatter(ctas)
         logger.info(f'{self.c} Creating {tablename} with query:\n{text}')

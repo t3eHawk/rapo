@@ -82,9 +82,10 @@ create table rapo_config (
   preparation_sql     clob,
   prerequisite_sql    clob,
   status              varchar2(1) default 'N' not null,
-  updated_date        date default sysdate not null,
-  created_date        date default sysdate not null,
-  created_by          varchar2(60) default user not null,
+  updated_by          varchar2(128),
+  updated_date        date,
+  created_by          varchar2(128) not null,
+  created_date        date not null,
   constraint rapo_config_pk primary key (control_id),
   constraint rapo_config_type_fk
     foreign key (control_type)
@@ -114,21 +115,45 @@ begin
 end;
 /
 
+create or replace trigger rapo_config_ins_trg
+before insert on rapo_config
+for each row
+begin
+  select sys_context('userenv', 'os_user') as created_by,
+         sysdate as created_date
+    into :new.created_by,
+         :new.created_date
+    from dual;
+end;
+/
+
+create or replace trigger rapo_config_upd_trg
+before update on rapo_config
+for each row
+begin
+  select sys_context('userenv', 'os_user') as updated_by,
+         sysdate as updated_date
+    into :new.updated_by,
+         :new.updated_date
+    from dual;
+end;
+/
+
 create table rapo_config_bak as select * from rapo_config where 1 = 0;
 alter table rapo_config_bak add audit_action varchar2(10);
-alter table rapo_config_bak add audit_date date;
 alter table rapo_config_bak add audit_user varchar2(60);
+alter table rapo_config_bak add audit_date date;
 
 create or replace trigger rapo_config_audit
 after insert or update or delete on rapo_config
 for each row
 declare
-  v_audit_action varchar2(10);
-  v_audit_date   date         := sysdate;
-  v_audit_user   varchar2(60) := user;
+  v_audit_action rapo_config_bak.audit_action%type;
+  v_audit_user   rapo_config_bak.audit_user%type  := sys_context('userenv', 'os_user');
+  v_audit_date   rapo_config_bak.audit_date%type  := sysdate;
 begin
   if inserting then
-    v_audit_action := 'insert';
+    v_audit_action := 'INSERT';
     insert into rapo_config_bak values (
       :new.control_id,
       :new.control_name,
@@ -140,27 +165,40 @@ begin
       :new.control_engine,
       :new.source_name,
       :new.source_date_field,
+      :new.source_filter,
       :new.output_table,
       :new.source_name_a,
       :new.source_date_field_a,
+      :new.source_filter_a,
       :new.output_table_a,
       :new.source_name_b,
       :new.source_date_field_b,
+      :new.source_filter_b,
       :new.output_table_b,
       :new.rule_config,
+      :new.case_config,
+      :new.result_config,
       :new.error_config,
       :new.need_a,
       :new.need_b,
       :new.schedule,
       :new.days_back,
       :new.days_retention,
+      :new.with_deletion,
+      :new.with_drop,
       :new.need_hook,
+      :new.need_prerun_hook,
+      :new.need_postrun_hook,
+      :new.preparation_sql,
+      :new.prerequisite_sql,
       :new.status,
-      :new.created_date,
+      :new.updated_by,
+      :new.updated_date,
       :new.created_by,
+      :new.created_date,
       v_audit_action,
-      v_audit_date,
-      v_audit_user
+      v_audit_user,
+      v_audit_date
     );
   else
     if updating then
@@ -168,39 +206,52 @@ begin
     elsif deleting then
       v_audit_action := 'DELETE';
     end if;
-      insert into rapo_config_bak values (
-        :old.control_id,
-        :old.control_name,
-        :old.control_desc,
-        :old.control_alias,
-        :old.control_group,
-        :old.control_type,
-        :old.control_subtype,
-        :old.control_engine,
-        :old.source_name,
-        :old.source_date_field,
-        :old.output_table,
-        :old.source_name_a,
-        :old.source_date_field_a,
-        :old.output_table_a,
-        :old.source_name_b,
-        :old.source_date_field_b,
-        :old.output_table_b,
-        :old.rule_config,
-        :old.error_config,
-        :old.need_a,
-        :old.need_b,
-        :old.schedule,
-        :old.days_back,
-        :old.days_retention,
-        :old.need_hook,
-        :old.status,
-        :old.created_date,
-        :old.created_by,
-        v_audit_action,
-        v_audit_date,
-        v_audit_user
-      );
+    insert into rapo_config_bak values (
+      :old.control_id,
+      :old.control_name,
+      :old.control_desc,
+      :old.control_alias,
+      :old.control_group,
+      :old.control_type,
+      :old.control_subtype,
+      :old.control_engine,
+      :old.source_name,
+      :old.source_date_field,
+      :old.source_filter,
+      :old.output_table,
+      :old.source_name_a,
+      :old.source_date_field_a,
+      :old.source_filter_a,
+      :old.output_table_a,
+      :old.source_name_b,
+      :old.source_date_field_b,
+      :old.source_filter_b,
+      :old.output_table_b,
+      :old.rule_config,
+      :old.case_config,
+      :old.result_config,
+      :old.error_config,
+      :old.need_a,
+      :old.need_b,
+      :old.schedule,
+      :old.days_back,
+      :old.days_retention,
+      :old.with_deletion,
+      :old.with_drop,
+      :old.need_hook,
+      :old.need_prerun_hook,
+      :old.need_postrun_hook,
+      :old.preparation_sql,
+      :old.prerequisite_sql,
+      :old.status,
+      :old.updated_by,
+      :old.updated_date,
+      :old.created_by,
+      :old.created_date,
+      v_audit_action,
+      v_audit_user,
+      v_audit_date
+    );
   end if;
 end;
 /
@@ -286,8 +337,8 @@ commit;
 create or replace function rapo_prerun_control_hook (in_process_id number) return varchar2
 as
   v_control_name varchar2(20);
-  v_date_from date;
-  v_return_code varchar2(2000) := null;
+  v_date_from    date;
+  v_return_code  varchar2(2000) := null;
 begin
   -- extract variables "v_control_name" and "v_date_from" from initiated control
   select

@@ -78,9 +78,10 @@ create table rapo_config (
   preparation_sql     text,
   prerequisite_sql    text,
   status              text default 'N' not null,
-  updated_date        date default (datetime('now', 'localtime')) not null,
-  created_date        date default (datetime('now', 'localtime')) not null,
+  updated_by          text,
+  updated_date        text,
   created_by          text default user not null,
+  created_date        text default (datetime('now', 'localtime')) not null,
   constraint rapo_config_type_fk
     foreign key (control_type)
     references rapo_ref_types(type_code),
@@ -130,8 +131,8 @@ create table rapo_scheduler (
   server     text,
   username   text,
   pid        integer,
-  start_date date,
-  stop_date  date,
+  start_date text,
+  stop_date  text,
   status     text not null
 );
 insert into rapo_scheduler (id, status) values ('RAPO.SCHEDULER', 'N');
@@ -143,8 +144,8 @@ create table rapo_web_api (
   pid        integer,
   url        text,
   debug      text,
-  start_date date,
-  stop_date  date,
+  start_date text,
+  stop_date  text,
   status     text not null
 );
 insert into rapo_web_api (id, status) values ('RAPO.WEB.API', 'N');

@@ -18,7 +18,7 @@ from ..reader import reader
 from ..utils import utils
 
 from .fields import RESULT_KEY, RESULT_VALUE, RESULT_TYPE
-from .case import NORMAL, INFO, ERROR, WARNING, DISCREPANCY, INCIDENT
+from .case import NORMAL, INFO, ERROR, WARNING, INCIDENT, DISCREPANCY
 
 
 class Control():
@@ -1305,7 +1305,7 @@ class Parser():
         logger.debug(f'{self.c} Parsing case configuration...')
         string = self.control.config['case_config']
         if string:
-            case_list = [NORMAL, INFO, ERROR, WARNING, DISCREPANCY, INCIDENT]
+            case_list = [NORMAL, INFO, ERROR, WARNING, INCIDENT, DISCREPANCY]
             custom_config = json.loads(string)
             final_config = {}
             for custom_record in custom_config:
@@ -1464,7 +1464,7 @@ class Parser():
         elif not string and self.control.has_cases:
             table = self.control.input_table
             result_type = table.c.rapo_result_type
-            target_types = [INFO, ERROR, WARNING, DISCREPANCY, INCIDENT]
+            target_types = [INFO, ERROR, WARNING, INCIDENT, DISCREPANCY]
             clause = sa.or_(result_type.in_(target_types),
                             result_type.is_(None))
             statement = db.compile(clause)

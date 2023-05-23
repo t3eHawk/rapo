@@ -25,14 +25,15 @@ commit;
 
 create table rapo_ref_cases (
   case_type varchar2(15) not null,
+  case_desc varchar2(300),
   constraint rapo_ref_subtypes_pk primary key (case_type)
 );
-insert into rapo_ref_cases values ('Normal');
-insert into rapo_ref_cases values ('Info');
-insert into rapo_ref_cases values ('Error');
-insert into rapo_ref_cases values ('Warning');
-insert into rapo_ref_cases values ('Discrepancy');
-insert into rapo_ref_cases values ('Incident');
+insert into rapo_ref_cases values ('Normal', 'Within this case normal result is defined');
+insert into rapo_ref_cases values ('Info', 'Within this case something found that must be noted');
+insert into rapo_ref_cases values ('Error', 'Within this case an error found that must be inspected');
+insert into rapo_ref_cases values ('Warning', 'Within this case a minor error found that should be inspected as soon as possible');
+insert into rapo_ref_cases values ('Incident', 'Within this case a critical error found that must investigated immediately');
+insert into rapo_ref_cases values ('Discrepancy', 'Within this case the difference between some values found');
 commit;
 
 create table rapo_ref_engines (
@@ -46,23 +47,23 @@ commit;
 
 create table rapo_config (
   control_id          number(*, 0),
-  control_name        varchar2(20) not null,
-  control_desc        varchar2(300),
-  control_alias       varchar2(60),
-  control_group       varchar2(60),
+  control_name        varchar2(45) not null,
+  control_desc        varchar2(500),
+  control_alias       varchar2(90),
+  control_group       varchar2(90),
   control_type        varchar2(30) not null,
   control_subtype     varchar2(30),
   control_engine      varchar2(30) not null,
-  source_name         varchar2(30),
-  source_date_field   varchar2(30),
-  source_filter       varchar2(30),
+  source_name         varchar2(128),
+  source_date_field   varchar2(128),
+  source_filter       clob,
   output_table        clob,
-  source_name_a       varchar2(30),
-  source_date_field_a varchar2(30),
+  source_name_a       varchar2(128),
+  source_date_field_a varchar2(128),
   source_filter_a     clob,
   output_table_a      clob,
-  source_name_b       varchar2(30),
-  source_date_field_b varchar2(30),
+  source_name_b       varchar2(128),
+  source_date_field_b varchar2(128),
   source_filter_b     clob,
   output_table_b      clob,
   rule_config         clob,
@@ -71,7 +72,7 @@ create table rapo_config (
   error_config        clob,
   need_a              varchar2(1),
   need_b              varchar2(1),
-  schedule            varchar2(300) not null,
+  schedule            clob,
   days_back           number(*, 0) default 1 not null,
   days_retention      number(*, 0) default 365 not null,
   with_deletion       varchar2(1) default 'N' not null,
@@ -141,7 +142,7 @@ end;
 
 create table rapo_config_bak as select * from rapo_config where 1 = 0;
 alter table rapo_config_bak add audit_action varchar2(10);
-alter table rapo_config_bak add audit_user varchar2(60);
+alter table rapo_config_bak add audit_user varchar2(128);
 alter table rapo_config_bak add audit_date date;
 
 create or replace trigger rapo_config_audit
@@ -309,8 +310,8 @@ end;
 
 create table rapo_scheduler (
   id         varchar2(15 char) not null,
-  server     varchar2(30),
-  username   varchar2(30),
+  server     varchar2(255),
+  username   varchar2(128),
   pid        number(*, 0),
   start_date date,
   stop_date  date,
@@ -322,10 +323,10 @@ commit;
 
 create table rapo_web_api (
   id         varchar2(15 char) not null,
-  server     varchar2(30 char),
-  username   varchar2(30 char),
+  server     varchar2(255 char),
+  username   varchar2(128 char),
   pid        number(*, 0),
-  url        varchar2(30 char),
+  url        varchar2(255 char),
   debug      char(1 char),
   start_date date,
   stop_date  date,

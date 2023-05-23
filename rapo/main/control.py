@@ -17,6 +17,7 @@ from ..logger import logger
 from ..reader import reader
 from ..utils import utils
 
+from .fields import RESULT_KEY, RESULT_VALUE, RESULT_TYPE
 from .case import NORMAL, INFO, ERROR, WARNING, DISCREPANCY, INCIDENT
 
 
@@ -285,11 +286,6 @@ class Control():
         """Get control run process ID."""
         return self._process_id
 
-    @property
-    def pid(self):
-        """Shortcut for process_id."""
-        return self._process_id
-
     @process_id.setter
     def process_id(self, value):
         if isinstance(value, int) or value is None:
@@ -298,6 +294,11 @@ class Control():
             type = value.__class__.__name__
             message = f'process_id must be int or None, not {type}'
             raise TypeError(message)
+
+    @property
+    def pid(self):
+        """Shortcut for process_id."""
+        return self._process_id
 
     @property
     def source_name(self):
@@ -350,9 +351,9 @@ class Control():
         return self.parser.parse_result_columns()
 
     @property
-    def process_column(self):
+    def key_column(self):
         """Get process identification column."""
-        return self.parser.parse_process_column()
+        return self.parser.parse_key_column()
 
     @property
     def status(self):
@@ -425,6 +426,21 @@ class Control():
     def temp_tables(self):
         """Get temporary tables."""
         return self.parser.parse_temp_tables()
+
+    @property
+    def is_analysis(self):
+        """Identify whether control is analysis or not."""
+        return True if self.type == 'ANL' else False
+
+    @property
+    def is_reconciliation(self):
+        """Identify whether control is reconciliation or not."""
+        return True if self.type == 'REC' else False
+
+    @property
+    def is_report(self):
+        """Identify whether control is report or not."""
+        return True if self.type == 'ANL' else False
 
     @property
     def has_cases(self):
@@ -1338,7 +1354,7 @@ class Parser():
         """
         logger.debug(f'{self.c} Parsing result columns...')
         custom_statement = self.control.config['result_config']
-        if custom_statement:
+        if self.control.is_analysis and custom_statement:
             columns = []
             case_config = self.parse_case_config()
 
@@ -1370,10 +1386,18 @@ class Parser():
                 columns.append(column)
             logger.debug(f'{self.c} Result columns parsed')
             return columns
+        elif self.control.is_analysis and not custom_statement:
+            columns = []
+            fields = [RESULT_KEY, RESULT_VALUE, RESULT_TYPE]
+            for field in fields:
+                column = field.null
+                columns.append(column)
+            logger.debug(f'{self.c} Result columns not configured')
+            return columns
         else:
-            logger.debug(f'{self.c} Result columns not found')
+            logger.debug(f'{self.c} Result columns not parsed')
 
-    def parse_process_column(self):
+    def parse_key_column(self):
         """Get process identification and description column.
 
         Returns
@@ -1443,7 +1467,8 @@ class Parser():
             target_types = [INFO, ERROR, WARNING, DISCREPANCY, INCIDENT]
             clause = sa.or_(result_type.in_(target_types),
                             result_type.is_(None))
-            expression = db.compile(clause)
+            statement = db.compile(clause)
+            expression = statement.string
             return expression
         else:
             logger.debug(f'{self.c} Error SQL not found')
@@ -1583,13 +1608,8 @@ class Parser():
     def parse_mandatory_columns(self):
         """Get control mandatory columns."""
         logger.debug(f'{self.c} Parsing mandatory columns...')
-        if self.control.has_cases:
-            columns = []
-            fields = ['key', 'value', 'type']
-            for field in fields:
-                column_name = f'rapo_result_{field}'
-                column = {'column': column_name}
-                columns.append(column)
+        if self.control.is_analysis:
+            columns = [RESULT_KEY, RESULT_VALUE, RESULT_TYPE]
             logger.debug(f'{self.c} Mandatory columns parsed')
             return columns
         else:
@@ -1696,8 +1716,12 @@ class Executor():
             select = input_table.select()
         else:
             columns = []
-            for output_column in [*output_columns, *mandatory_columns]:
+            for output_column in output_columns:
                 name = output_column['column']
+                column = input_table.c[name]
+                columns.append(column)
+            for mandatory_column in mandatory_columns:
+                name = mandatory_column.column_name
                 column = input_table.c[name]
                 columns.append(column)
             select = sa.select(columns)
@@ -1919,7 +1943,7 @@ class Executor():
         """Save defined results as output records."""
         logger.debug(f'{self.c} Start saving...')
         table = self.control.result_table
-        process_id = self.control.process_column
+        process_id = self.control.key_column
         select = sa.select([*table.columns, process_id])
         table = self.prepare_output_table()
         insert = table.insert().from_select(table.columns, select)
@@ -1930,7 +1954,7 @@ class Executor():
         """Save defined errors as output records."""
         logger.debug(f'{self.c} Start saving...')
         table = self.control.error_table
-        process_id = self.control.process_column
+        process_id = self.control.key_column
         select = sa.select([*table.columns, process_id])
         table = self.prepare_output_table()
         insert = table.insert().from_select(table.columns, select)
@@ -1975,6 +1999,7 @@ class Executor():
 
             columns = []
             output_columns = self.control.output_columns
+            mandatory_columns = self.control.mandatory_columns
             if output_columns is None or len(output_columns) == 0:
                 if self.c.config['source_name'] is not None:
                     columns.extend(self.c.source_table.columns)
@@ -2003,8 +2028,11 @@ class Executor():
                         table = self.control.source_table
                         column = table.c[name]
                     columns.append(column)
+            for mandatory_column in mandatory_columns:
+                column = mandatory_column.null
+                columns.append(column)
 
-            process_id = self.control.process_column
+            process_id = self.control.key_column
             columns = [*columns, process_id]
             select = sa.select(columns)
             select = select.where(sa.literal(1) == sa.literal(0))

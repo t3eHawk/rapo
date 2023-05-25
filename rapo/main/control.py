@@ -670,8 +670,10 @@ class Control():
                                 if self._finish():
                                     if self._done():
                                         self._postrun_hook()
-                self._do_not_resume()
-            self._can_not_prepare()
+                else:
+                    self._do_not_resume()
+            else:
+                self._can_not_prepare()
 
     def _do_not_resume(self):
         if not self.prerequisite_value:
@@ -690,19 +692,19 @@ class Control():
     def _spawn(self):
         logger.debug(f'{self} Spawning new process for the control...')
         context = mp.get_context('spawn')
-        process = context.Process(name=self, target=self._resume)
-        process.start()
-        handler = th.Thread(name=f'{self}-Handler', target=self._handle)
-        handler.start()
-        logger.info(f'{self} Running as process on PID {process.pid}')
-        self.process, self.handler = process, handler
+        self.process = context.Process(name=self.name, target=self._resume)
+        self.process.start()
+        self.handler = th.Thread(name=f'{self}-Handler', target=self._handle)
+        self.handler.start()
+        logger.info(f'{self} Running as process on PID {self.process.pid}')
 
     def _handle(self):
         process = self.process
-        while process.is_alive() and self.status == 'P':
+        while process.is_alive():
             control = Control(process_id=self.process_id)
             if not control.status:
                 logger.info(f'{self} Control cancelation request received')
+                self.process = process
                 self._terminate()
                 self._cancel()
             tm.sleep(5)
@@ -718,9 +720,9 @@ class Control():
         logger.debug(f'{self} Process at PID {pid} returns {result_code}')
 
     def _terminate(self):
-        logger.info(f'{self} Terminating process of the control...')
         process = self.process
         pid = process.pid
+        logger.info(f'{self} Terminating process at PID {pid}...')
         process.terminate()
         logger.info(f'{self} Process at PID {pid} terminated')
 
@@ -943,7 +945,8 @@ class Control():
 
     def _clean(self):
         logger.info(f'{self} Cleaning control results...')
-        if self.days_retention == 0:
+        days_retention = self.config['days_retention']
+        if days_retention == 0:
             for table in self.output_tables:
                 repr = f'[{self.name}]'
                 logger.info(f'{repr} Deleting all results in {table}...')
@@ -958,7 +961,7 @@ class Control():
                         logger.info(f'{repr} Deleting results in {table}...')
                         id = table.c.rapo_process_id
                         query = table.delete().where(id == process_id)
-                        text = db.formatter(query)
+                        text = db.formatter.document(query)
                         logger.debug(f'{self} Deleting from {table} '
                                      f'with query:\n{text}')
                         db.execute(query)
@@ -1218,7 +1221,7 @@ class Parser():
         return self._parse_filter('source_filter_b')
 
     def _parse_filter(self, filter_name):
-        return self.config[filter_name]
+        return self.control.config[filter_name]
 
     def parse_output_names(self):
         """Get list with necessary output table names.
@@ -1435,11 +1438,7 @@ class Parser():
         """
         logger.debug(f'{self.c} Parsing error SQL...')
         string = self.control.config['error_config']
-        if utils.is_sql(string):
-            expression = self._parse_sql_filter(string)
-            logger.debug(f'{self.c} Error SQL parsed')
-            return expression
-        elif utils.is_json(string):
+        if utils.is_json(string):
             table = self.control.input_table
             expressions = []
             config = self.parse_analyze_error_config()
@@ -1460,6 +1459,10 @@ class Parser():
                 expressions.append(expression)
             expression = '\n'.join(expressions)
             logger.debug(f'{self.c} Error SQL parsed using configuration')
+            return expression
+        elif utils.is_sql(string):
+            expression = self._parse_sql_filter(string)
+            logger.debug(f'{self.c} Error SQL parsed')
             return expression
         elif not string and self.control.has_cases:
             table = self.control.input_table
@@ -1620,15 +1623,17 @@ class Parser():
         log = db.tables.log
         control_id = self.control.id
         days_retention = self.control.config['days_retention']
+        today = dt.date.today().strftime(r'%Y-%m-%d')
+        current_date = sa.func.to_date(today, 'YYYY-MM-DD')
+        target_date = current_date-days_retention
         for table in self.parse_output_tables():
             select = sa.select([log.c.process_id])
-            date = sa.func.trunc(sa.func.sysdate())-days_retention
             subq = sa.select([table.c.rapo_process_id])
             query = (select.where(log.c.control_id == control_id)
-                           .where(log.c.added < date)
+                           .where(log.c.added < target_date)
                            .where(log.c.process_id.in_(subq))
                            .order_by(log.c.process_id))
-            text = db.formatter(query)
+            text = db.formatter.document(query)
             logger.debug(f'{self.c} Searching outdated results in {table} '
                          f'with query:\n{text}')
             result = db.execute(query)
@@ -1731,7 +1736,7 @@ class Executor():
         select = select.where(clause)
         select = db.compile(select)
         ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
-        text = db.formatter(ctas)
+        text = db.formatter.document(ctas)
         logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
         db.execute(ctas)
         logger.debug(f'{self.c} {tablename} created')
@@ -1796,7 +1801,7 @@ class Executor():
         tablename = f'rapo_temp_md_{self.control.process_id}'
         select = db.compile(select)
         ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
-        text = db.formatter(ctas)
+        text = db.formatter.document(ctas)
         logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
         db.execute(ctas)
         logger.debug(f'{self.c} {tablename} created')
@@ -1861,7 +1866,7 @@ class Executor():
         tablename = f'rapo_temp_nmd_{self.control.process_id}'
         select = db.compile(select)
         ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
-        text = db.formatter(ctas)
+        text = db.formatter.document(ctas)
         logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
         db.execute(ctas)
         logger.debug(f'{self.c} {tablename} created')
@@ -2000,7 +2005,7 @@ class Executor():
             columns = []
             output_columns = self.control.output_columns
             mandatory_columns = self.control.mandatory_columns
-            if output_columns is None or len(output_columns) == 0:
+            if not output_columns or len(output_columns) == 0:
                 if self.c.config['source_name'] is not None:
                     columns.extend(self.c.source_table.columns)
                 if self.c.config['source_name_a'] is not None:
@@ -2028,9 +2033,10 @@ class Executor():
                         table = self.control.source_table
                         column = table.c[name]
                     columns.append(column)
-            for mandatory_column in mandatory_columns:
-                column = mandatory_column.null
-                columns.append(column)
+            if mandatory_columns:
+                for mandatory_column in mandatory_columns:
+                    column = mandatory_column.null
+                    columns.append(column)
 
             process_id = self.control.key_column
             columns = [*columns, process_id]
@@ -2042,7 +2048,7 @@ class Executor():
                      f'ON {tablename}(rapo_process_id) COMPRESS')
             compress = (f'ALTER TABLE {tablename} '
                         'MOVE ROW STORE COMPRESS ADVANCED')
-            text = db.formatter(ctas, index, compress)
+            text = db.formatter.document(ctas, index, compress)
             logger.debug(f'{self.c} Creating table {tablename} '
                          f'with query:\n{text}')
             db.execute(ctas)
@@ -2090,7 +2096,7 @@ class Executor():
         logger.debug(f'{self.c} Start fetching...')
         select = db.compile(select)
         ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
-        text = db.formatter(ctas)
+        text = db.formatter.document(ctas)
         logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
         db.execute(ctas)
         logger.info(f'{self.c} {tablename} created')

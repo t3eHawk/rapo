@@ -285,6 +285,9 @@ class Scheduler():
 
     def _complete(self):
         try:
+            if int(self.moment) % 600 == 0:
+                report = db.engine.pool.status()
+                logger.info(f'Database connection report: {report}')
             if int(self.moment) % 86400 == 0:
                 logger.debug('Maintenance triggered')
                 self.maintenance.set()

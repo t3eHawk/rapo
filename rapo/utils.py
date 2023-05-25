@@ -80,7 +80,7 @@ class Utils():
         """
         try:
             json.loads(string)
-        except ValueError:
+        except (TypeError, ValueError):
             return False
         else:
             return True

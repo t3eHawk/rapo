@@ -26,7 +26,7 @@ commit;
 create table rapo_ref_cases (
   case_type varchar2(15) not null,
   case_desc varchar2(300),
-  constraint rapo_ref_subtypes_pk primary key (case_type)
+  constraint rapo_ref_cases_pk primary key (case_type)
 );
 insert into rapo_ref_cases values ('Normal', 'Within this case normal result is defined');
 insert into rapo_ref_cases values ('Info', 'Within this case something found that must be noted');
@@ -374,6 +374,7 @@ begin
 exception
   when others then return 'Error executing RAPO prerun hook: ' || sqlerrm || ', backtrace:' || dbms_utility.format_error_backtrace;
 end;
+/
 
 create or replace procedure rapo_postrun_control_hook (
   in_process_id number
@@ -382,3 +383,4 @@ as
 begin
   null;
 end;
+/

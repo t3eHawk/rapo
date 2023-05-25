@@ -5,9 +5,10 @@ import sys
 import sqlalchemy as sa
 import cx_Oracle as oracle
 
-import sqlparse as spe
+import sqlparse as spa
 
 from .config import config
+from .config import get_deprecated
 
 
 class Database():
@@ -49,79 +50,70 @@ class Database():
         def __init__(self, database):
             self.database = database
 
-        def __call__(self, *queries):
-            """Format received raw SQL query into final human-read form."""
+        def __call__(self, statement):
+            """Format given SQL statement to match the common style."""
+            string = self._compile(statement)
+            result = self._parse(string)
+            return result
+
+        def document(self, *statements):
+            """Format given SQL statements for documents or logging."""
             results = []
-            for query in queries:
-                query = self._prepare(query)
-                result = self._parse(query)
+            for statement in statements:
+                text = self._prepare(statement)
+                result = self._parse(text)
                 results.append(result)
-            strings = '\n'.join(results)
-            string = f'{str():->40}\n{strings}\n{str():->40}'
-            return string
+            body = '\n'.join(results)
+            result = f'{str():->40}\n{body}\n{str():->40}'
+            return result
 
-        def _prepare(self, query):
-            query = self._compile(query)
-            query = self._separate(query)
-            return query
+        def _prepare(self, statement):
+            string = self._compile(statement)
+            result = self._separate(string)
+            return result
 
-        def _parse(self, query):
-            result = spe.format(query, keyword_case='upper',
+        def _parse(self, statement):
+            result = spa.format(statement, keyword_case='upper',
                                 identifier_case='lower',
                                 reindent_aligned=True)
             return result
 
-        def _compile(self, query):
-            if isinstance(query, str):
-                return query
+        def _compile(self, statement):
+            if isinstance(statement, str):
+                return statement
             else:
                 engine = self.database.engine
                 ckwargs = self.database.ckwargs
-                query = query.compile(bind=engine, compile_kwargs=ckwargs)
-                string = query.string
-                return string
+                statement = statement.compile(bind=engine,
+                                              compile_kwargs=ckwargs)
+                result = statement.string
+                return result
 
-        def _separate(self, query):
-            if query.rstrip()[-1] != ';':
-                query = f'{query.rstrip()};'
-            return query
+        def _separate(self, statement):
+            if statement.rstrip()[-1] != ';':
+                statement = f'{statement.rstrip()};'
+            return statement
 
     def setup(self):
         """Setup database engine based on configuration."""
-        used_config = config['DATABASE']
-        try:
-            vendor_name = used_config['vendor_name']
-        except KeyError as error:
-            if used_config.get('vendor'):
-                vendor_name = used_config['vendor']
-                print('Please use parameter vendor_name instead of vendor, ',
-                      'which is depreciated and will be removed soon.')
-            else:
-                raise error
-        driver_name = used_config.get('driver_name')
-        host = used_config.get('host')
-        port = used_config.get('port')
-        path = used_config.get('path')
-        sid = used_config.get('sid')
-        service_name = used_config.get('service')
-        service_name = used_config.get('service_name')
-        try:
-            username = used_config.get('username')
-        except KeyError as error:
-            if used_config.get('user'):
-                username = used_config.get('user')
-                print('Please use parameter username instead of user, ',
-                      'which is depreciated and will be removed soon.')
-            else:
-                raise error
-        password = used_config.get('password')
-        client_path = used_config.get('client_path')
-        max_identifier_length = used_config.get('max_identifier_length', 128)
-        max_overflow = used_config.get('max_overflow', 10)
-        pool_pre_ping = used_config.get('pool_pre_ping', True)
-        pool_size = used_config.get('pool_size', 5)
-        pool_recycle = used_config.get('pool_recycle', -1)
-        pool_timeout = used_config.get('pool_timeout', 30)
+        parameters = config['DATABASE']
+        vendor_name = get_deprecated(parameters, 'vendor', 'vendor_name')
+        driver_name = parameters.get('driver_name')
+        host = parameters.get('host')
+        port = parameters.get('port')
+        path = parameters.get('path')
+        sid = parameters.get('sid')
+        service_name = get_deprecated(parameters, 'service', 'service_name',
+                                      optional=True)
+        username = get_deprecated(parameters, 'user', 'username')
+        password = parameters.get('password')
+        client_path = parameters.get('client_path')
+        max_identifier_length = parameters.getint('max_identifier_length', 128)
+        max_overflow = parameters.getint('max_overflow', 10)
+        pool_pre_ping = parameters.getboolean('pool_pre_ping', True)
+        pool_size = parameters.getint('pool_size', 5)
+        pool_recycle = parameters.getint('pool_recycle', -1)
+        pool_timeout = parameters.getint('pool_timeout', 30)
         if vendor_name == 'sqlite' and path:
             if sys.platform.startswith('win'):
                 url = f'{vendor_name}:///{path}'

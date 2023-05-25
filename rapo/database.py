@@ -1,5 +1,6 @@
 """Contains database instance with application schema."""
 
+import os
 import sys
 
 import sqlalchemy as sa
@@ -17,9 +18,10 @@ class Database():
     ckwargs = {'literal_binds': True}
 
     def __init__(self):
-        self.setup()
-        self.load()
-        self.formatter = self.Formatter(self)
+        if self.configured:
+            self.setup()
+            self.load()
+            self.formatter = self.Formatter(self)
 
     class Tables():
         """Represents database tables."""
@@ -103,8 +105,7 @@ class Database():
         port = parameters.get('port')
         path = parameters.get('path')
         sid = parameters.get('sid')
-        service_name = get_deprecated(parameters, 'service', 'service_name',
-                                      optional=True)
+        service_name = get_deprecated(parameters, 'service', 'service_name')
         username = get_deprecated(parameters, 'user', 'username')
         password = parameters.get('password')
         client_path = parameters.get('client_path')
@@ -119,6 +120,7 @@ class Database():
                 url = f'{vendor_name}:///{path}'
             else:
                 url = f'{vendor_name}:////{path}'
+            settings = {}
         elif vendor_name == 'oracle':
             credentials = f'{username}:{password}'
             address = f'{host}:{port}'
@@ -130,12 +132,12 @@ class Database():
             url += f'/{identifier}'
             if client_path:
                 oracle.init_oracle_client(lib_dir=client_path)
-        settings = dict(max_identifier_length=max_identifier_length,
-                        max_overflow=max_overflow,
-                        pool_pre_ping=pool_pre_ping,
-                        pool_size=pool_size,
-                        pool_recycle=pool_recycle,
-                        pool_timeout=pool_timeout)
+            settings = dict(max_identifier_length=max_identifier_length,
+                            max_overflow=max_overflow,
+                            pool_pre_ping=pool_pre_ping,
+                            pool_size=pool_size,
+                            pool_recycle=pool_recycle,
+                            pool_timeout=pool_timeout)
         self.engine = sa.create_engine(url, **settings)
 
     def load(self):
@@ -234,6 +236,27 @@ class Database():
             Compiled SQL statement.
         """
         return obj.compile(bind=self.engine, compile_kwargs=self.ckwargs)
+
+    @property
+    def configured(self):
+        """Test database configuration."""
+        if config and config.has_section('DATABASE'):
+            parameters = config['DATABASE']
+            vendor_name = parameters.get('vendor_name',
+                                         parameters.get('vendor'))
+            if vendor_name:
+                host = parameters.get('host')
+                port = parameters.get('port')
+                path = parameters.get('path')
+                if vendor_name == 'sqlite':
+                    if path and os.path.exists(path):
+                        return True
+                    return False
+                elif vendor_name == 'oracle':
+                    if host and port:
+                        return True
+                    return False
+        return False
 
 
 db = Database()

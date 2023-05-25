@@ -1,7 +1,7 @@
 pepperoni==0.2.1
 psutil==5.9.4
 sqlparse==0.4.3
-flask==2.2.3
+flask==2.2.5
 flask_httpauth==4.7.0
 waitress==2.1.2
 SQLAlchemy==1.4.46

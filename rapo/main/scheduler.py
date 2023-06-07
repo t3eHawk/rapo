@@ -17,6 +17,7 @@ import queue
 import psutil
 
 from ..database import db
+from ..config import config
 from ..logger import logger
 from ..reader import reader
 
@@ -224,18 +225,19 @@ class Scheduler():
 
     def _start_executors(self):
         logger.debug('Starting executors...')
-        for i in range(5):
-            name = f'Thread-Executor-{i}'
+        thread_number = config['SCHEDULER']['control_parallelism']
+        for i in range(thread_number):
+            name = f'Control-Executor-{i}'
             target = self._execute
             thread = th.Thread(name=name, target=target, daemon=True)
             thread.start()
             self.executors.append(thread)
-            logger.debug(f'Executor {i} started as {thread.name}')
+            logger.debug(f'Control Executor {i} started as {thread.name}')
         logger.debug('All executors started')
 
     def _start_maintainer(self):
         logger.debug('Starting maintainer...')
-        name = 'Thread-Maintainer'
+        name = 'Maintainer'
         target = self._maintain
         thread = th.Thread(name=name, target=target, daemon=True)
         thread.start()
@@ -258,7 +260,8 @@ class Scheduler():
 
     def _read(self):
         try:
-            if self.schedule is None or int(self.moment) % 300 == 0:
+            interval = config['SCHEDULER']['refresh_interval']
+            if not self.schedule or int(self.moment) % interval == 0:
                 self.schedule = dict(self._sked())
                 if self.schedule:
                     logger.debug(f'Schedule: {self.schedule}')
@@ -285,12 +288,14 @@ class Scheduler():
 
     def _complete(self):
         try:
-            if int(self.moment) % 600 == 0:
-                report = db.engine.pool.status()
-                logger.info(f'Database connection report: {report}')
-            if int(self.moment) % 86400 == 0:
+            interval = config['SCHEDULER']['maintenance_interval']
+            if interval and int(self.moment) % interval == 0:
                 logger.debug('Maintenance triggered')
                 self.maintenance.set()
+            interval = config['SCHEDULER']['database_report_interval']
+            if interval and int(self.moment) % interval == 0:
+                report = db.engine.pool.status()
+                logger.info(f'Database connection report: {report}')
         except Exception:
             logger.error()
 

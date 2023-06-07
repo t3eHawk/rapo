@@ -282,6 +282,12 @@ class Control():
             raise TypeError(message)
 
     @property
+    def date(self):
+        """Get control date if relevant."""
+        if self.date_from.date() == self.date_to.date():
+            return self.date_from.date()
+
+    @property
     def process_id(self):
         """Get control run process ID."""
         return self._process_id
@@ -303,7 +309,11 @@ class Control():
     @property
     def source_name(self):
         """Get control data source name."""
-        return utils.to_lower(self.config['source_name'])
+        custom_name = self.config['source_name']
+        if custom_name:
+            custom_name = custom_name.format(**self.variables)
+            final_name = utils.to_lower(custom_name)
+            return final_name
 
     @property
     def source_filter(self):
@@ -318,7 +328,11 @@ class Control():
     @property
     def source_name_a(self):
         """Get control data source A name."""
-        return utils.to_lower(self.config['source_name_a'])
+        custom_name = self.config['source_name_a']
+        if custom_name:
+            custom_name = custom_name.format(**self.variables)
+            final_name = utils.to_lower(custom_name)
+            return final_name
 
     @property
     def source_filter_a(self):
@@ -333,7 +347,11 @@ class Control():
     @property
     def source_name_b(self):
         """Get control data source B name."""
-        return utils.to_lower(self.config['source_name_b'])
+        custom_name = self.config['source_name_b']
+        if custom_name:
+            custom_name = custom_name.format(**self.variables)
+            final_name = utils.to_lower(custom_name)
+            return final_name
 
     @property
     def source_filter_b(self):
@@ -354,6 +372,11 @@ class Control():
     def key_column(self):
         """Get process identification column."""
         return self.parser.parse_key_column()
+
+    @property
+    def variables(self):
+        """Get control variables."""
+        return self.parser.parse_variables()
 
     @property
     def status(self):
@@ -1075,6 +1098,7 @@ class Parser():
         """
         custom_statement = self.control.config['prerequisite_sql']
         if custom_statement:
+            custom_statement = custom_statement.format(**self.c.variables)
             final_statement = db.formatter(custom_statement)
             return final_statement
 
@@ -1088,6 +1112,7 @@ class Parser():
         """
         custom_statement = self.control.config['preparation_sql']
         if custom_statement:
+            custom_statement = custom_statement.format(**self.c.variables)
             final_statement = db.formatter(custom_statement)
             return final_statement
 
@@ -1410,6 +1435,22 @@ class Parser():
         """
         column = sa.literal(self.control.process_id).label('rapo_process_id')
         return column
+
+    def parse_variables(self):
+        """Get control variables.
+
+        Returns
+        -------
+        variables : dict
+            Dictionary with control variables.
+        """
+        control = self.control
+        variables = dict(control_name=control.name,
+                         control_date=control.date,
+                         control_date_from=control.date_from,
+                         control_date_to=control.date_to,
+                         process_id=control.process_id)
+        return variables
 
     def parse_analyze_error_config(self):
         """Get analyze error configuration.

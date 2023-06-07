@@ -3,8 +3,9 @@
 Used to transfer parameters from user to application.
 """
 
-import configparser
 import os
+import re
+import configparser
 
 
 path = os.path.abspath(os.path.expanduser('~/.rapo/rapo.ini'))
@@ -28,20 +29,24 @@ class Configurator(dict):
         parser.read(path, encoding=encoding)
         for section in parser.sections():
             for option in parser.options(section):
-                value = parser[section][option]
-                if value is None or value.upper() == 'NONE' or value.isspace():
-                    self[section][option] = None
-                elif value.upper() == 'TRUE':
-                    self[section][option] = True
-                elif value.upper() == 'FALSE':
-                    self[section][option] = False
-                elif value.isdigit():
-                    self[section][option] = int(value)
-                elif value.isdecimal():
-                    self[section][option] = float(value)
-                else:
-                    self[section][option] = value
+                initial_value = parser[section][option]
+                final_value = self.normalize(initial_value)
+                self[section][option] = final_value
         return self
+
+    def normalize(self, value):
+        """Normalize given parameter value."""
+        if value is None or value.upper() == 'NONE' or value.isspace():
+            return None
+        elif value.upper() == 'TRUE':
+            return True
+        elif value.upper() == 'FALSE':
+            return False
+        elif re.match(r'^[+-]?\d+$', value):
+            return int(value)
+        elif re.match(r'^[+-]?(\d*.\d+|\d+\.\d*)$', value):
+            return float(value)
+        return value
 
     def check(self, configuration_name):
         """Determine whether configuration presented or not."""

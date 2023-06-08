@@ -16,6 +16,7 @@ url = f'https://github.com/t3eHawk/{name}'
 python_requires = '>=3.7'
 install_requires = open('requirements.txt').read().splitlines()
 packages = setuptools.find_packages()
+package_data = {'rapo': ['web/api/templates/*']}
 classifiers = ['Programming Language :: Python :: 3.7',
                'Programming Language :: Python :: 3.11',
                'License :: OSI Approved :: MIT License',
@@ -34,4 +35,5 @@ setuptools.setup(name=name,
                  python_requires=python_requires,
                  install_requires=install_requires,
                  packages=packages,
+                 package_data=package_data,
                  classifiers=classifiers)

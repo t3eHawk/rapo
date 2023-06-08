@@ -1091,7 +1091,7 @@ class Parser():
     def _parse_source_name(self, source_name):
         custom_name = self.control.config[source_name]
         if custom_name:
-            custom_name = custom_name.format(**self.variables)
+            custom_name = custom_name.format(**self.c.variables)
             final_name = utils.to_lower(custom_name)
             return final_name
 

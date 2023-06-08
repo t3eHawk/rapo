@@ -282,6 +282,12 @@ class Control():
             raise TypeError(message)
 
     @property
+    def date(self):
+        """Get control date if relevant."""
+        if self.date_from.date() == self.date_to.date():
+            return self.date_from.date()
+
+    @property
     def process_id(self):
         """Get control run process ID."""
         return self._process_id
@@ -303,7 +309,7 @@ class Control():
     @property
     def source_name(self):
         """Get control data source name."""
-        return utils.to_lower(self.config['source_name'])
+        return self.parser.parse_source_name()
 
     @property
     def source_filter(self):
@@ -318,7 +324,7 @@ class Control():
     @property
     def source_name_a(self):
         """Get control data source A name."""
-        return utils.to_lower(self.config['source_name_a'])
+        return self.parser.parse_source_name_a()
 
     @property
     def source_filter_a(self):
@@ -333,7 +339,7 @@ class Control():
     @property
     def source_name_b(self):
         """Get control data source B name."""
-        return utils.to_lower(self.config['source_name_b'])
+        return self.parser.parse_source_name_b()
 
     @property
     def source_filter_b(self):
@@ -354,6 +360,11 @@ class Control():
     def key_column(self):
         """Get process identification column."""
         return self.parser.parse_key_column()
+
+    @property
+    def variables(self):
+        """Get control variables."""
+        return self.parser.parse_variables()
 
     @property
     def status(self):
@@ -1037,7 +1048,7 @@ class Parser():
         return date
 
     def parse_dates(self):
-        """."""
+        """Parse control dates according to configuration."""
         days_back = self.control.config['days_back']
         date_from = self.parse_date_from()-dt.timedelta(days=days_back)
         date_to = self.parse_date_to()-dt.timedelta(days=days_back)
@@ -1065,31 +1076,24 @@ class Parser():
         date = self._parse_date(timestamp, 23, 59, 59)
         return date
 
-    def parse_prerequisite_statement(self):
-        """Prepare prerequisite statement taken from the configuration table.
+    def parse_source_name(self):
+        """Get data source name."""
+        return self._parse_source_name('source_name')
 
-        Returns
-        -------
-        final_statement : str or None
-            Formatted SQL query representing prerequisite statement.
-        """
-        custom_statement = self.control.config['prerequisite_sql']
-        if custom_statement:
-            final_statement = db.formatter(custom_statement)
-            return final_statement
+    def parse_source_name_a(self):
+        """Get data source A name."""
+        return self._parse_source_name('source_name_a')
 
-    def parse_preparation_statement(self):
-        """Get preparation statement taken from the configuration table.
+    def parse_source_name_b(self):
+        """Get data source B name."""
+        return self._parse_source_name('source_name_b')
 
-        Returns
-        -------
-        final_statement : str or None
-            Formatted SQL query that must be performed before the control.
-        """
-        custom_statement = self.control.config['preparation_sql']
-        if custom_statement:
-            final_statement = db.formatter(custom_statement)
-            return final_statement
+    def _parse_source_name(self, source_name):
+        custom_name = self.control.config[source_name]
+        if custom_name:
+            custom_name = custom_name.format(**self.c.variables)
+            final_name = utils.to_lower(custom_name)
+            return final_name
 
     def parse_source_table(self):
         """Get data source table.
@@ -1297,6 +1301,33 @@ class Parser():
                 tables.append(table)
         return tables
 
+    def parse_prerequisite_statement(self):
+        """Prepare prerequisite statement taken from the configuration table.
+
+        Returns
+        -------
+        final_statement : str or None
+            Formatted SQL query representing prerequisite statement.
+        """
+        return self._parse_statement('prerequisite_sql')
+
+    def parse_preparation_statement(self):
+        """Get preparation statement taken from the configuration table.
+
+        Returns
+        -------
+        final_statement : str or None
+            Formatted SQL query that must be performed before the control.
+        """
+        return self._parse_statement('preparation_sql')
+
+    def _parse_statement(self, statement_name):
+        custom_statement = self.control.config[statement_name]
+        if custom_statement:
+            custom_statement = custom_statement.format(**self.c.variables)
+            final_statement = db.formatter(custom_statement)
+            return final_statement
+
     def parse_case_config(self):
         """Get case mapping taken from the configuration table.
 
@@ -1346,70 +1377,6 @@ class Parser():
             return final_config
         else:
             logger.debug(f'{self.c} Result configuration not found')
-
-    def parse_result_columns(self):
-        """Get result columns based on result statement and case configuration.
-
-        Returns
-        -------
-        columns : List of sqlalchemy columns or None
-            Object representing result column.
-        """
-        logger.debug(f'{self.c} Parsing result columns...')
-        custom_statement = self.control.config['result_config']
-        if self.control.is_analysis and custom_statement:
-            columns = []
-            case_config = self.parse_case_config()
-
-            replaces = []
-            pattern = r'THEN\s+\d+|ELSE\s+\d+'
-            matches = re.findall(pattern, custom_statement, re.IGNORECASE)
-            for match in matches:
-                keyword, result = re.split(r'\s+', match)
-                case_id = int(result)
-                case_value = case_config[case_id]['case_value']
-                case_type = case_config[case_id]['case_type']
-
-                replace = [match, {}]
-                replace[1]['key'] = f'{keyword} {case_id}'
-                replace[1]['value'] = f'{keyword} \'{case_value}\''
-                replace[1]['type'] = f'{keyword} \'{case_type}\''
-                replaces.append(replace)
-
-            columns = []
-            for field in ['key', 'value', 'type']:
-                field_name = f'rapo_result_{field}'
-                final_statement = custom_statement
-                for replace in replaces:
-                    old = replace[0]
-                    new = replace[1][field]
-                    final_statement = final_statement.replace(old, new)
-                final_statement = db.formatter(final_statement)
-                column = sa.literal_column(final_statement).label(field_name)
-                columns.append(column)
-            logger.debug(f'{self.c} Result columns parsed')
-            return columns
-        elif self.control.is_analysis and not custom_statement:
-            columns = []
-            fields = [RESULT_KEY, RESULT_VALUE, RESULT_TYPE]
-            for field in fields:
-                column = field.null
-                columns.append(column)
-            logger.debug(f'{self.c} Result columns not configured')
-            return columns
-        else:
-            logger.debug(f'{self.c} Result columns not parsed')
-
-    def parse_key_column(self):
-        """Get process identification and description column.
-
-        Returns
-        -------
-        columns : sqlalchemy column
-            Object representing process identification column.
-        """
-        column = sa.literal(self.control.process_id).label('rapo_process_id')
-        return column
 
     def parse_analyze_error_config(self):
         """Get analyze error configuration.
@@ -1617,6 +1584,86 @@ class Parser():
             return columns
         else:
             logger.debug(f'{self.c} Mandatory columns not defined')
+
+    def parse_result_columns(self):
+        """Get result columns based on result statement and case configuration.
+
+        Returns
+        -------
+        columns : List of sqlalchemy columns or None
+            Object representing result column.
+        """
+        logger.debug(f'{self.c} Parsing result columns...')
+        custom_statement = self.control.config['result_config']
+        if self.control.is_analysis and custom_statement:
+            columns = []
+            case_config = self.parse_case_config()
+
+            replaces = []
+            pattern = r'THEN\s+\d+|ELSE\s+\d+'
+            matches = re.findall(pattern, custom_statement, re.IGNORECASE)
+            for match in matches:
+                keyword, result = re.split(r'\s+', match)
+                case_id = int(result)
+                case_value = case_config[case_id]['case_value']
+                case_type = case_config[case_id]['case_type']
+
+                replace = [match, {}]
+                replace[1]['key'] = f'{keyword} {case_id}'
+                replace[1]['value'] = f'{keyword} \'{case_value}\''
+                replace[1]['type'] = f'{keyword} \'{case_type}\''
+                replaces.append(replace)
+
+            columns = []
+            for field in ['key', 'value', 'type']:
+                field_name = f'rapo_result_{field}'
+                final_statement = custom_statement
+                for replace in replaces:
+                    old = replace[0]
+                    new = replace[1][field]
+                    final_statement = final_statement.replace(old, new)
+                final_statement = db.formatter(final_statement)
+                column = sa.literal_column(final_statement).label(field_name)
+                columns.append(column)
+            logger.debug(f'{self.c} Result columns parsed')
+            return columns
+        elif self.control.is_analysis and not custom_statement:
+            columns = []
+            fields = [RESULT_KEY, RESULT_VALUE, RESULT_TYPE]
+            for field in fields:
+                column = field.null
+                columns.append(column)
+            logger.debug(f'{self.c} Result columns not configured')
+            return columns
+        else:
+            logger.debug(f'{self.c} Result columns not parsed')
+
+    def parse_key_column(self):
+        """Get process identification and description column.
+
+        Returns
+        -------
+        columns : sqlalchemy column
+            Object representing process identification column.
+        """
+        column = sa.literal(self.control.process_id).label('rapo_process_id')
+        return column
+
+    def parse_variables(self):
+        """Get control variables.
+
+        Returns
+        -------
+        variables : dict
+            Dictionary with control variables.
+        """
+        control = self.control
+        variables = dict(control_name=control.name,
+                         control_date=control.date,
+                         control_date_from=control.date_from,
+                         control_date_to=control.date_to,
+                         process_id=control.process_id)
+        return variables
 
     def parse_outdated_results(self):
         """Create list with tables and IDs of outdated control results."""

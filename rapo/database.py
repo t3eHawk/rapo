@@ -9,7 +9,6 @@ import cx_Oracle as oracle
 import sqlparse as spa
 
 from .config import config
-from .config import get_deprecated
 
 
 class Database():
@@ -99,22 +98,22 @@ class Database():
     def setup(self):
         """Setup database engine based on configuration."""
         parameters = config['DATABASE']
-        vendor_name = get_deprecated(parameters, 'vendor', 'vendor_name')
+        vendor_name = parameters.get_deprecated('vendor', 'vendor_name')
         driver_name = parameters.get('driver_name')
         host = parameters.get('host')
         port = parameters.get('port')
         path = parameters.get('path')
         sid = parameters.get('sid')
-        service_name = get_deprecated(parameters, 'service', 'service_name')
-        username = get_deprecated(parameters, 'user', 'username')
+        service_name = parameters.get_deprecated('service', 'service_name')
+        username = parameters.get_deprecated('user', 'username')
         password = parameters.get('password')
         client_path = parameters.get('client_path')
-        max_identifier_length = parameters.getint('max_identifier_length', 128)
-        max_overflow = parameters.getint('max_overflow', 10)
-        pool_pre_ping = parameters.getboolean('pool_pre_ping', True)
-        pool_size = parameters.getint('pool_size', 5)
-        pool_recycle = parameters.getint('pool_recycle', -1)
-        pool_timeout = parameters.getint('pool_timeout', 30)
+        max_identifier_length = parameters.get('max_identifier_length', 128)
+        max_overflow = parameters.get('max_overflow', 10)
+        pool_pre_ping = parameters.get('pool_pre_ping', True)
+        pool_size = parameters.get('pool_size', 5)
+        pool_recycle = parameters.get('pool_recycle', -1)
+        pool_timeout = parameters.get('pool_timeout', 30)
         if vendor_name == 'sqlite' and path:
             if sys.platform.startswith('win'):
                 url = f'{vendor_name}:///{path}'
@@ -240,7 +239,7 @@ class Database():
     @property
     def configured(self):
         """Test database configuration."""
-        if config and config.has_section('DATABASE'):
+        if config and config.check('DATABASE'):
             parameters = config['DATABASE']
             vendor_name = parameters.get('vendor_name',
                                          parameters.get('vendor'))

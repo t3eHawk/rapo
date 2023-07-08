@@ -1674,6 +1674,10 @@ class Parser():
         current_date = sa.func.to_date(today, 'YYYY-MM-DD')
         target_date = current_date-days_retention
         for table in self.parse_output_tables():
+            # when days_retention control parameter is zero -> mark table to be truncated instead of deleting pids
+            if not days_retention:
+                yield (table, None)
+                break
             select = sa.select([log.c.process_id])
             subq = sa.select([table.c.rapo_process_id])
             query = (select.where(log.c.control_id == control_id)

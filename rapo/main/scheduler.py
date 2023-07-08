@@ -388,7 +388,6 @@ class Scheduler():
                 self._clean()
                 self.maintenance.clear()
                 logger.info('Maintenance performed')
-                break
             time.sleep(1)
 
     def _clean(self):

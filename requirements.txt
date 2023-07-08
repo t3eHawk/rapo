@@ -1,0 +1,8 @@
+pepperoni==0.2.1
+psutil==5.9.5
+sqlparse==0.4.4
+flask==2.2.5
+flask_httpauth==4.8.0
+waitress==2.1.2
+SQLAlchemy==1.4.46
+cx-Oracle==8.3.0

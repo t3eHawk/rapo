@@ -17,6 +17,7 @@ import queue
 import psutil
 
 from ..database import db
+from ..config import config
 from ..logger import logger
 from ..reader import reader
 
@@ -103,7 +104,6 @@ class Scheduler():
                 self._start()
             elif args.stop is True:
                 self._stop()
-        pass
 
     @property
     def running(self):
@@ -112,7 +112,6 @@ class Scheduler():
             return True
         else:
             return False
-        pass
 
     def start(self):
         """Start scheduler.
@@ -154,7 +153,6 @@ class Scheduler():
         self._synchronize()
         while True:
             self._process()
-        pass
 
     def _stop(self):
         if self.status is True:
@@ -164,7 +162,6 @@ class Scheduler():
             self._disable()
             logger.info(f'Scheduler at PID {self.pid} stopped')
             return self._exit()
-        pass
 
     def _create(self):
         exe = sys.executable
@@ -185,25 +182,20 @@ class Scheduler():
             self.status = False
             self._disable()
             return self._terminate()
-        pass
 
     def _enable(self):
-        conn = db.connect()
         update = self.table.update().values(server=self.server,
                                             username=self.username,
                                             pid=self.pid,
                                             start_date=self.start_date,
                                             stop_date=self.stop_date,
                                             status='Y')
-        conn.execute(update)
-        pass
+        db.execute(update)
 
     def _disable(self):
-        conn = db.connect()
         update = self.table.update().values(stop_date=self.stop_date,
                                             status='N')
-        conn.execute(update)
-        pass
+        db.execute(update)
 
     def _exit(self):
         return sys.exit()
@@ -214,7 +206,6 @@ class Scheduler():
         except OSError:
             message = f'scheduler at PID {self.pid} was not found'
             raise Warning(message)
-        pass
 
     def _parse_console_arguments(self):
         return [arg for arg in sys.argv[1:] if arg.startswith('-') is False]
@@ -231,50 +222,46 @@ class Scheduler():
         signal.signal(signal.SIGINT, lambda signum, frame: self._stop())
         signal.signal(signal.SIGTERM, lambda signum, frame: self._stop())
         logger.debug('Signal handlers started')
-        pass
 
     def _start_executors(self):
         logger.debug('Starting executors...')
-        for i in range(5):
-            name = f'Thread-Executor-{i}'
+        thread_number = config['SCHEDULER']['control_parallelism']
+        for i in range(thread_number):
+            name = f'Control-Executor-{i}'
             target = self._execute
             thread = th.Thread(name=name, target=target, daemon=True)
             thread.start()
             self.executors.append(thread)
-            logger.debug(f'Executor {i} started as {thread.name}')
+            logger.debug(f'Control Executor {i} started as {thread.name}')
         logger.debug('All executors started')
-        pass
 
     def _start_maintainer(self):
         logger.debug('Starting maintainer...')
-        name = 'Thread-Maintainer'
+        name = 'Maintainer'
         target = self._maintain
         thread = th.Thread(name=name, target=target, daemon=True)
         thread.start()
         self.maintainer = thread
         logger.debug(f'Maintainer started as {thread.name}...')
-        pass
 
     def _synchronize(self):
         logger.debug('Time will be synchronized')
         self.moment = time.time()
         logger.debug('Time was synchronized')
-        pass
 
     def _increment(self):
         self.moment += 1
-        pass
 
     def _process(self):
         self._read()
         self._walk()
         self._complete()
         self._next()
-        pass
 
     def _read(self):
         try:
-            if self.schedule is None or int(self.moment) % 300 == 0:
+            interval = config['SCHEDULER']['refresh_interval']
+            if not self.schedule or int(self.moment) % interval == 0:
                 self.schedule = dict(self._sked())
                 if self.schedule:
                     logger.debug(f'Schedule: {self.schedule}')
@@ -282,7 +269,6 @@ class Scheduler():
                     logger.debug('Schedule is empty')
         except Exception:
             logger.error()
-        pass
 
     def _walk(self):
         now = time.localtime(self.moment)
@@ -299,16 +285,19 @@ class Scheduler():
                     self._register(name, self.moment)
             except Exception:
                 logger.error()
-        pass
 
     def _complete(self):
         try:
-            if int(self.moment) % 86400 == 0:
+            interval = config['SCHEDULER']['maintenance_interval']
+            if interval and int(self.moment) % interval == 0:
                 logger.debug('Maintenance triggered')
                 self.maintenance.set()
+            interval = config['SCHEDULER']['database_report_interval']
+            if interval and int(self.moment) % interval == 0:
+                report = db.engine.pool.status()
+                logger.info(f'Database connection report: {report}')
         except Exception:
             logger.error()
-        pass
 
     def _next(self):
         delay = time.time()-self.moment
@@ -321,14 +310,12 @@ class Scheduler():
         else:
             logger.debug(f'moment={self.moment}, delay={delay}, wait={wait}')
             self._increment()
-        pass
 
     def _sked(self):
         logger.debug('Getting schedule...')
-        conn = db.connect()
         table = db.tables.config
         select = table.select()
-        result = conn.execute(select)
+        result = db.execute(select)
         for row in result:
             try:
                 name = row.control_name
@@ -343,7 +330,6 @@ class Scheduler():
             else:
                 yield name, record
         logger.debug('Schedule retrieved')
-        pass
 
     def _check(self, unit, now):
         # Check if empty or *.
@@ -370,7 +356,6 @@ class Scheduler():
         # All other cases is not for the now.
         else:
             return False
-        pass
 
     def _register(self, name, moment):
         try:
@@ -380,7 +365,6 @@ class Scheduler():
             logger.error()
         else:
             logger.info(f'Control {name}[{moment}] was added to queue')
-        pass
 
     def _execute(self):
         while True:
@@ -396,7 +380,6 @@ class Scheduler():
                     self.queue.task_done()
                     logger.info(f'Control {name}[{moment}] performed')
             time.sleep(1)
-        pass
 
     def _maintain(self):
         while True:
@@ -406,16 +389,11 @@ class Scheduler():
                 self.maintenance.clear()
                 logger.info('Maintenance performed')
             time.sleep(1)
-        pass
 
     def _clean(self):
-        conn = db.connect()
         config = db.tables.config
         select = config.select().order_by(config.c.control_id)
-        result = conn.execute(select)
+        result = db.execute(select)
         for row in result:
             control = Control(name=row.control_name)
             control.clean()
-        pass
-
-    pass

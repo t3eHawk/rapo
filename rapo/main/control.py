@@ -1,12 +1,14 @@
 """Contains RAPO control interface."""
 
-import datetime as dt
-import json
-import multiprocessing as mp
 import sys
 import threading as th
-import time as tm
+import multiprocessing as mp
 import traceback as tb
+
+import re
+import json
+import time as tm
+import datetime as dt
 
 import sqlalchemy as sa
 
@@ -14,6 +16,9 @@ from ..database import db
 from ..logger import logger
 from ..reader import reader
 from ..utils import utils
+
+from .fields import RESULT_KEY, RESULT_VALUE, RESULT_TYPE
+from .case import NORMAL, INFO, ERROR, WARNING, INCIDENT, DISCREPANCY
 
 
 class Control():
@@ -170,6 +175,9 @@ class Control():
         self.parser = Parser(self)
         self.executor = Executor(self)
 
+        self.process = None
+        self.handler = None
+
         self.process_id = process_id
         if self.result:
             self.start_date = self.result['start_date']
@@ -243,7 +251,6 @@ class Control():
         self._with_error = False
         self._all_errors = []
         self._pending_error = None
-        pass
 
     def __str__(self):
         """Take control information and represent it as a simple string.
@@ -257,7 +264,6 @@ class Control():
             return f'[{self.name}]'
         else:
             return f'[{self.name}:{self.process_id}]'
-        pass
 
     __repr__ = __str__
 
@@ -274,16 +280,16 @@ class Control():
             type = value.__class__.__name__
             message = f'name must be str or None, not {type}'
             raise TypeError(message)
-        pass
+
+    @property
+    def date(self):
+        """Get control date if relevant."""
+        if self.date_from.date() == self.date_to.date():
+            return self.date_from.date()
 
     @property
     def process_id(self):
         """Get control run process ID."""
-        return self._process_id
-
-    @property
-    def pid(self):
-        """Shortcut for process_id."""
         return self._process_id
 
     @process_id.setter
@@ -294,12 +300,21 @@ class Control():
             type = value.__class__.__name__
             message = f'process_id must be int or None, not {type}'
             raise TypeError(message)
-        pass
+
+    @property
+    def pid(self):
+        """Shortcut for process_id."""
+        return self._process_id
 
     @property
     def source_name(self):
         """Get control data source name."""
-        return utils.to_lower(self.config['source_name'])
+        return self.parser.parse_source_name()
+
+    @property
+    def source_filter(self):
+        """Get control data source filter clause."""
+        return self.parser.parse_filter()
 
     @property
     def source_date_field(self):
@@ -309,7 +324,12 @@ class Control():
     @property
     def source_name_a(self):
         """Get control data source A name."""
-        return utils.to_lower(self.config['source_name_a'])
+        return self.parser.parse_source_name_a()
+
+    @property
+    def source_filter_a(self):
+        """Get control data source A filter clause."""
+        return self.parser.parse_filter_a()
 
     @property
     def source_date_field_a(self):
@@ -319,12 +339,32 @@ class Control():
     @property
     def source_name_b(self):
         """Get control data source B name."""
-        return utils.to_lower(self.config['source_name_b'])
+        return self.parser.parse_source_name_b()
+
+    @property
+    def source_filter_b(self):
+        """Get control data source B filter clause."""
+        return self.parser.parse_filter_b()
 
     @property
     def source_date_field_b(self):
         """Get control data source B date field."""
         return utils.to_lower(self.config['source_date_field_b'])
+
+    @property
+    def result_columns(self):
+        """Get object representing result columns."""
+        return self.parser.parse_result_columns()
+
+    @property
+    def key_column(self):
+        """Get process identification column."""
+        return self.parser.parse_key_column()
+
+    @property
+    def variables(self):
+        """Get control variables."""
+        return self.parser.parse_variables()
 
     @property
     def status(self):
@@ -346,7 +386,6 @@ class Control():
         else:
             message = f'incorrect status: {value}'
             raise ValueError(message)
-        pass
 
     @property
     def initiated(self):
@@ -355,7 +394,6 @@ class Control():
             return True
         else:
             return False
-        pass
 
     @property
     def working(self):
@@ -364,7 +402,6 @@ class Control():
             return True
         else:
             return False
-        pass
 
     @property
     def select(self):
@@ -402,6 +439,28 @@ class Control():
         return self.parser.parse_temp_tables()
 
     @property
+    def is_analysis(self):
+        """Identify whether control is analysis or not."""
+        return True if self.type == 'ANL' else False
+
+    @property
+    def is_reconciliation(self):
+        """Identify whether control is reconciliation or not."""
+        return True if self.type == 'REC' else False
+
+    @property
+    def is_report(self):
+        """Identify whether control is report or not."""
+        return True if self.type == 'ANL' else False
+
+    @property
+    def has_cases(self):
+        """Identify whether control is case-configured or not."""
+        if self.config['result_config'] and self.config['case_config']:
+            return True
+        return False
+
+    @property
     def rule_config(self):
         """Get control match configuration."""
         if self.type == 'ANL':
@@ -410,7 +469,16 @@ class Control():
             return self.parser.parse_reconciliation_rule_config()
         elif self.type == 'REP':
             return []
-        pass
+
+    @property
+    def case_config(self):
+        """Get control case configuration."""
+        return self.parser.parse_case_config()
+
+    @property
+    def result_config(self):
+        """Get control result configuration."""
+        return self.parser.parse_result_config()
 
     @property
     def error_config(self):
@@ -421,7 +489,12 @@ class Control():
             return self.parser.parse_reconciliation_error_config()
         elif self.type == 'REP':
             return []
-        pass
+
+    @property
+    def error_sql(self):
+        """Get control error SQL expression."""
+        if self.type == 'ANL':
+            return self.parser.parse_analyze_error_sql()
 
     @property
     def output_columns(self):
@@ -439,24 +512,44 @@ class Control():
         return self.parser.parse_output_columns_b()
 
     @property
+    def mandatory_columns(self):
+        """Get control mandatory output columns configuration."""
+        return self.parser.parse_mandatory_columns()
+
+    @property
     def need_a(self):
         """Get parameter defining necessity of data source A saving."""
-        return True if self.config['need_a'] == 'Y' else False
+        return self.parser.parse_boolean('need_a')
 
     @property
     def need_b(self):
         """Get parameter defining necessity of data source B saving."""
-        return True if self.config['need_b'] == 'Y' else False
+        return self.parser.parse_boolean('need_b')
+
+    @property
+    def with_deletion(self):
+        """Get parameter to clear output table before usage."""
+        return self.parser.parse_boolean('with_deletion')
+
+    @property
+    def with_drop(self):
+        """Get parameter to drop output table before usage."""
+        return self.parser.parse_boolean('with_drop')
 
     @property
     def need_hook(self):
         """Get parameter defining necessity of hook execution."""
-        return True if self.config['need_hook'] == 'Y' else False
+        return self.parser.parse_boolean('need_hook')
 
     @property
     def need_prerun_hook(self):
         """Get parameter defining necessity of prerun hook execution."""
-        return True if self.config['need_prerun_hook'] == 'Y' else False
+        return self.parser.parse_boolean('need_prerun_hook')
+
+    @property
+    def need_postrun_hook(self):
+        """Get parameter defining necessity of postrun hook execution."""
+        return self.parser.parse_boolean('need_postrun_hook')
 
     @property
     def text_error(self):
@@ -469,103 +562,180 @@ class Control():
     def run(self):
         """Run control in an ordinary way."""
         logger.debug(f'{self} Running control...')
-        if self._initiate() is True:
-            if self._prerun_hook() is True:
-                if self._start() is True:
-                    if self._progress() is True:
-                        if self._finish() is True:
-                            if self._done() is True:
-                                self._hook()
-            else:
-                self._terminate()
-                self._cancel()
-        pass
+        if self._initiate():
+            self._resume()
 
-    def process(self):
+    def launch(self):
         """Run control as a separate accompanied stoppable process."""
         logger.debug(f'{self} Running control...')
-        if self._initiate() is True:
-            self._resume()
-        pass
+        if self._initiate():
+            self._spawn()
+
+    def prerequisite(self):
+        """Get the result of the prerequisite statement."""
+        return self._prerequisite()
+
+    def prepare(self):
+        """Execute control preparation SQL scripts."""
+        self._prepare()
 
     def resume(self):
         """Resume initiated control run."""
-        if self.initiated:
-            if self._prerun_hook() is True:
-                if self._start() is True:
-                    if self._progress() is True:
-                        if self._finish() is True:
-                            if self._done() is True:
-                                self._hook()
-            else:
-                self._terminate()
-                self._cancel()
-        pass
+        self._resume()
+
+    def wait(self):
+        """Wait untill control finishes."""
+        return self._wait()
 
     def cancel(self):
         """Cancel control run."""
         if self.working:
-            self._terminate()
-        pass
+            self._deinitiate()
 
     def delete(self):
         """Delete control results."""
         self._delete()
-        pass
 
     def revoke(self):
         """Revoke control results."""
         self._revoke()
-        pass
 
     def clean(self):
         """Clean control results."""
         self._clean()
-        pass
 
     def _initiate(self):
         logger.info(f'{self} Initiating control...')
         try:
             self.status = 'I'
             logger.debug(f'{self} Creating new record in {db.tables.log}')
-            conn = db.connect()
             insert = db.tables.log.insert()
             insert = insert.values(control_id=self.id,
                                    added=dt.datetime.now(),
                                    status=self.status,
                                    date_from=self.date_from,
                                    date_to=self.date_to)
-            result = conn.execute(insert)
+            result = db.execute(insert)
             self.process_id = int(result.inserted_primary_key[0])
         except Exception:
             logger.error()
-            return self._exit()
+            return self._escape()
         else:
             logger.debug(f'{self} New record in {db.tables.log} created')
             logger.info(f'{self} Control owns process ID {self.process_id}')
             logger.info(f'{self} Control initiated')
             return self._continue()
-        pass
+
+    def _deinitiate(self):
+        logger.info(f'{self} Deinitiating control...')
+        try:
+            self.status = None
+            self._update(status=self.status)
+        except Exception:
+            logger.error()
+        else:
+            logger.info(f'{self} Control deinitiated')
+
+    def _prerequisite(self):
+        statement = self.parser.parse_prerequisite_statement()
+        if statement:
+            logger.info(f'{self} Checking control prerequisite statement...')
+            try:
+                result = db.execute(statement).scalar()
+                self.prerequisite_value = result
+                logger.info(f'{self} Control prerequisite statement '
+                            f'returns {self.prerequisite_value}')
+                self._update(prerequisite_value=self.prerequisite_value)
+                if not self.prerequisite_value:
+                    return False
+            except Exception:
+                logger.error()
+                return self._escape()
+            else:
+                return self._continue()
+        return self._continue()
+
+    def _prepare(self):
+        statement = self.parser.parse_preparation_statement()
+        if statement:
+            logger.info(f'{self} Running control preparation SQL scripts...')
+            try:
+                result = db.execute(statement)
+                rowcount = result.rowcount
+                logger.info(f'{self} Control preparation SQL scripts '
+                            f'successfully performed returning {rowcount}')
+            except Exception:
+                logger.error()
+                return self._escape()
+            else:
+                return self._continue()
+        return self._continue()
 
     def _resume(self):
+        if self.initiated:
+            if self._prepare():
+                if self._prerequisite():
+                    if self._prerun_hook():
+                        if self._start():
+                            if self._progress():
+                                if self._finish():
+                                    if self._done():
+                                        self._postrun_hook()
+                else:
+                    self._do_not_resume()
+            else:
+                self._can_not_prepare()
+
+    def _do_not_resume(self):
+        if not self.prerequisite_value:
+            logger.info(f'{self} Control will not be resumed '
+                        'due to a prerequisite check')
+            message = ('Control execution stopped because the '
+                       'PREREQUISITE check not passed')
+            self._update(text_message=message)
+
+    def _can_not_prepare(self):
+        logger.info(f'{self} Control will not be resumed '
+                    'due to a preparation failure')
+        message = ('Control execution stopped because the PREPARATION failed')
+        self._update(text_message=message)
+
+    def _spawn(self):
+        logger.debug(f'{self} Spawning new process for the control...')
         context = mp.get_context('spawn')
-        process = context.Process(target=self.resume)
-        process.start()
-        logger.info(f'{self} Running as process on PID {process.pid}')
+        self.process = context.Process(name=self.name, target=self._resume)
+        self.process.start()
+        self.handler = th.Thread(name=f'{self}-Handler', target=self._handle)
+        self.handler.start()
+        logger.info(f'{self} Running as process on PID {self.process.pid}')
+
+    def _handle(self):
+        process = self.process
         while process.is_alive():
-            logger.debug(f'{self} PID {process.pid} is alive')
-            tm.sleep(5)
             control = Control(process_id=self.process_id)
-            if control.status is None:
-                logger.info(f'{self} Process termination request received')
-                process.terminate()
-                logger.info(f'{self} Process PID {process.pid} terminated')
+            if not control.status:
+                logger.info(f'{self} Control cancelation request received')
+                self.process = process
+                self._terminate()
                 self._cancel()
-                continue
-        logger.debug(f'{self} PID {process.pid} returns {process.exitcode}')
-        process.join()
-        self.__dict__.update(control.__dict__)
-        pass
+            tm.sleep(5)
+            self.__dict__.update(control.__dict__)
+
+    def _wait(self):
+        process = self.process
+        pid = process.pid
+        logger.debug(f'{self} Waiting for process at PID {pid}...')
+        while process.is_alive():
+            tm.sleep(1)
+        result_code = process.exitcode
+        logger.debug(f'{self} Process at PID {pid} returns {result_code}')
+
+    def _terminate(self):
+        process = self.process
+        pid = process.pid
+        logger.info(f'{self} Terminating process at PID {pid}...')
+        process.terminate()
+        logger.info(f'{self} Process at PID {pid} terminated')
 
     def _start(self):
         logger.info(f'{self} Starting control...')
@@ -580,11 +750,10 @@ class Control():
                 self.source_table_b = self.parser.parse_source_table_b()
         except Exception:
             logger.error()
-            return self._exit()
+            return self._escape()
         else:
             logger.info(f'{self} Control started at {self.start_date}')
             return self._continue()
-        pass
 
     def _progress(self):
         try:
@@ -595,10 +764,9 @@ class Control():
             self._save()
         except Exception:
             logger.error()
-            return self._exit()
+            return self._escape()
         else:
             return self._continue()
-        pass
 
     def _finish(self):
         logger.info(f'{self} Finishing control...')
@@ -608,11 +776,10 @@ class Control():
             self.executor.drop_temporary_tables()
         except Exception:
             logger.error()
-            return self._exit()
+            return self._escape()
         else:
             logger.info(f'{self} Control finished')
             return self._continue()
-        pass
 
     def _cancel(self):
         logger.info(f'{self} Canceling control...')
@@ -625,7 +792,6 @@ class Control():
             logger.error()
         else:
             logger.info(f'{self} Control canceled')
-        pass
 
     def _done(self):
         try:
@@ -634,11 +800,10 @@ class Control():
             self._update(status=self.status, end_date=self.end_date)
         except Exception:
             logger.error()
-            return self._exit()
+            return self._escape()
         else:
             logger.info(f'{self} ended at {self.end_date}')
             return self._continue()
-        pass
 
     def _error(self):
         try:
@@ -649,12 +814,11 @@ class Control():
             logger.error()
         else:
             logger.info(f'{self} ended with error at {self.end_date}')
-        pass
 
     def _continue(self):
         return True
 
-    def _exit(self):
+    def _escape(self):
         self._with_error = True
         self._all_errors.append(sys.exc_info())
         self._update(text_error=self.text_error)
@@ -682,35 +846,30 @@ class Control():
                 if self._pending_error is not None:
                     raise self._pending_error
             self._update(fetched_a=self.fetched_a, fetched_b=self.fetched_b)
-        pass
 
     def _fetch_a(self):
         try:
             self.__fetch_a()
         except Exception as error:
             self._pending_error = error
-        pass
 
     def __fetch_a(self):
         logger.info(f'{self} Fetching {self.source_name_a}...')
         self.input_table_a = self.executor.fetch_records_a()
         self.fetched_a = self.executor.count_fetched_a()
         logger.info(f'{self} Records fetched A: {self.fetched_a}')
-        pass
 
     def _fetch_b(self):
         try:
             self.__fetch_b()
         except Exception as error:
             self._pending_error = error
-        pass
 
     def __fetch_b(self):
         logger.info(f'{self} Fetching {self.source_name_b}...')
         self.input_table_b = self.executor.fetch_records_b()
         self.fetched_b = self.executor.count_fetched_b()
         logger.info(f'{self} Records fetched B: {self.fetched_b}')
-        pass
 
     def _execute(self):
         logger.info(f'{self} Executing control...')
@@ -744,31 +903,26 @@ class Control():
                          success=self.success,
                          error_level=self.error_level)
         logger.info(f'{self} Control executed')
-        pass
 
     def _match(self):
         try:
             self.__match()
         except Exception as error:
             self._pending_error = error
-        pass
 
     def __match(self):
         self.result_table = self.executor.match()
         self.success = self.executor.count_matched()
-        pass
 
     def _mismatch(self):
         try:
             self.__mismatch()
         except Exception as error:
             self._pending_error = error
-        pass
 
     def __mismatch(self):
         self.error_table = self.executor.mismatch()
         self.errors = self.executor.count_mismatched()
-        pass
 
     def _save(self):
         logger.info(f'{self} Saving results...')
@@ -783,24 +937,11 @@ class Control():
                 if self.errors or 0 > 0:
                     self.executor.save_mismatches()
         logger.info(f'{self} Results saved')
-        pass
-
-    def _terminate(self):
-        logger.info(f'{self} Creating process termination request...')
-        try:
-            self.status = None
-            self._update(status=self.status)
-        except Exception:
-            logger.error()
-        else:
-            logger.info(f'{self} Process termination request created')
-        pass
 
     def _delete(self):
         logger.info(f'{self} Deleting results...')
         self.executor.delete_output_records()
         logger.info(f'{self} Results deleted')
-        pass
 
     def _revoke(self):
         try:
@@ -812,58 +953,62 @@ class Control():
             logger.error()
         else:
             logger.info(f'{self} Control revoked')
-        pass
 
     def _clean(self):
         logger.info(f'{self} Cleaning control results...')
-        conn = db.connect()
-        outdated_results = list(self.parser.parse_outdated_results())
-        if outdated_results:
-            for table, process_ids in outdated_results:
-                for process_id in process_ids:
-                    repr = f'[{self.name}:{process_id}]'
-                    logger.info(f'{repr} Deleting results in {table}...')
-                    id = table.c.rapo_process_id
-                    query = table.delete().where(id == process_id)
-                    text = db.formatter(query)
-                    logger.debug(f'{self} Deleting from {table} '
-                                 f'with query:\n{text}')
-                    conn.execute(query)
-                    logger.info(f'{repr} Results in {table} deleted')
-            logger.info(f'{self} Control results cleaned')
+        days_retention = self.config['days_retention']
+        if days_retention == 0:
+            for table in self.output_tables:
+                repr = f'[{self.name}]'
+                logger.info(f'{repr} Deleting all results in {table}...')
+                db.truncate(table.name)
+                logger.info(f'{repr} Results in {table} deleted')
         else:
-            logger.info(f'{self} No control results to clean')
-        pass
+            outdated_results = list(self.parser.parse_outdated_results())
+            if outdated_results:
+                for table, process_ids in outdated_results:
+                    for process_id in process_ids:
+                        repr = f'[{self.name}:{process_id}]'
+                        logger.info(f'{repr} Deleting results in {table}...')
+                        id = table.c.rapo_process_id
+                        query = table.delete().where(id == process_id)
+                        text = db.formatter.document(query)
+                        logger.debug(f'{self} Deleting from {table} '
+                                     f'with query:\n{text}')
+                        db.execute(query)
+                        logger.info(f'{repr} Results in {table} deleted')
+                logger.info(f'{self} Control results cleaned')
+            else:
+                logger.info(f'{self} No control results to clean')
 
     def _update(self, **kwargs):
         logger.debug(f'{self} Updating {db.tables.log} with {kwargs}')
-        conn = db.connect()
         update = db.tables.log.update()
         update = update.values(**kwargs, updated=dt.datetime.now())
         update = update.where(db.tables.log.c.process_id == self.process_id)
-        conn.execute(update)
+        db.execute(update)
         logger.debug(f'{self} {db.tables.log} updated')
-        pass
-
-    def _hook(self):
-        if self.need_hook is True:
-            self.executor.hook()
-        pass
 
     def _prerun_hook(self):
-        if self.need_prerun_hook is True:
+        if self.need_hook and self.need_prerun_hook:
             hook_result, hook_code = self.executor.prerun_hook()
             if not hook_result:
-                self._update(text_error=f'Control execution stopped because "rapo_prerun_control_hook" function evaluated as NOT OK (code={hook_code})')
+                message = ('Control execution stopped because PRERUN HOOK ',
+                           f'function evaluated as NOT OK [{hook_code}]')
+                self._update(text_message=message)
                 return False
         return True
+
+    def _postrun_hook(self):
+        if self.need_hook and self.need_postrun_hook:
+            self.executor.postrun_hook()
+
 
 class Parser():
     """Represents control parser."""
 
     def __init__(self, owner):
         self.__owner = owner
-        pass
 
     @property
     def control(self):
@@ -875,8 +1020,35 @@ class Parser():
         """Shortcut for control."""
         return self.__owner
 
+    def parse_boolean(self, name):
+        """Prepare a boolean value of the parameter by name.
+
+        Parameters
+        ----------
+        name : str
+            Name of the parameter from the configuration table.
+
+        Returns
+        -------
+        value : bool
+            Parameter value represented as boolean.
+        """
+        return True if self.control.config[name] == 'Y' else False
+
+    def parse_date(self, value, hour=None, minute=None, second=None):
+        """Get date from initial raw value."""
+        return self._parse_date(value, hour=hour, minute=minute, second=second)
+
+    def _parse_date(self, value, hour=None, minute=None, second=None):
+        date = utils.to_date(value)
+        if hour is not None or minute is not None or second is not None:
+            kwargs = {'hour': hour, 'minute': minute, 'second': second}
+            kwargs = {k: v for k, v in kwargs.items() if v is not None}
+            date = date.replace(**kwargs)
+        return date
+
     def parse_dates(self):
-        """."""
+        """Parse control dates according to configuration."""
         days_back = self.control.config['days_back']
         date_from = self.parse_date_from()-dt.timedelta(days=days_back)
         date_to = self.parse_date_to()-dt.timedelta(days=days_back)
@@ -904,17 +1076,24 @@ class Parser():
         date = self._parse_date(timestamp, 23, 59, 59)
         return date
 
-    def parse_date(self, value, hour=None, minute=None, second=None):
-        """Get date from initial raw value."""
-        return self._parse_date(value, hour=hour, minute=minute, second=second)
+    def parse_source_name(self):
+        """Get data source name."""
+        return self._parse_source_name('source_name')
 
-    def _parse_date(self, value, hour=None, minute=None, second=None):
-        date = utils.to_date(value)
-        if hour is not None or minute is not None or second is not None:
-            kwargs = {'hour': hour, 'minute': minute, 'second': second}
-            kwargs = {k: v for k, v in kwargs.items() if v is not None}
-            date = date.replace(**kwargs)
-        return date
+    def parse_source_name_a(self):
+        """Get data source A name."""
+        return self._parse_source_name('source_name_a')
+
+    def parse_source_name_b(self):
+        """Get data source B name."""
+        return self._parse_source_name('source_name_b')
+
+    def _parse_source_name(self, source_name):
+        custom_name = self.control.config[source_name]
+        if custom_name:
+            custom_name = custom_name.format(**self.c.variables)
+            final_name = utils.to_lower(custom_name)
+            return final_name
 
     def parse_source_table(self):
         """Get data source table.
@@ -975,8 +1154,11 @@ class Parser():
         select : sqlalchemy.Select
         """
         table = self.control.source_table
+        literals = self.control.result_columns
+        where = self.control.source_filter
         date_field = self.control.source_date_field
-        select = self._parse_select(table, date_field=date_field)
+        select = self._parse_select(table, literals=literals, where=where,
+                                    date_field=date_field)
         return select
 
     def parse_select_a(self):
@@ -987,8 +1169,9 @@ class Parser():
         select : sqlalchemy.Select
         """
         table = self.control.source_table_a
+        where = self.control.source_filter_a
         date_field = self.control.source_date_field_a
-        select = self._parse_select(table, date_field=date_field)
+        select = self._parse_select(table, where=where, date_field=date_field)
         return select
 
     def parse_select_b(self):
@@ -999,14 +1182,19 @@ class Parser():
         select : sqlalchemy.Select
         """
         table = self.control.source_table_b
+        where = self.control.source_filter_b
         date_field = self.control.source_date_field_b
-        select = self._parse_select(table, date_field=date_field)
+        select = self._parse_select(table, where=where, date_field=date_field)
         return select
 
-    def _parse_select(self, table, date_field=None):
+    def _parse_select(self, table, literals=None, where=None, date_field=None):
         logger.debug(f'{self.c} Parsing {table} select...')
-        select = table.select()
-        if isinstance(date_field, str) is True:
+        literals = literals if isinstance(literals, list) else []
+        select = sa.select([*table.columns, *literals])
+        if isinstance(where, str):
+            clause = sa.text(where)
+            select = select.where(clause)
+        if isinstance(date_field, str):
             column = table.c[date_field]
 
             datefmt = '%Y-%m-%d %H:%M:%S'
@@ -1018,8 +1206,26 @@ class Parser():
             date_to = sa.func.to_date(date_to, datefmt)
 
             select = select.where(column.between(date_from, date_to))
-            logger.debug(f'{self.c} {table} select parsed')
+        logger.debug(f'{self.c} {table} select parsed')
         return select
+
+    def parse_filter(self):
+        """Get SQL-like expression used to filter the data source.
+        """
+        return self._parse_filter('source_filter')
+
+    def parse_filter_a(self):
+        """Get SQL-like expression used to filter the data source A.
+        """
+        return self._parse_filter('source_filter_a')
+
+    def parse_filter_b(self):
+        """Get SQL-like expression used to filter the data source B.
+        """
+        return self._parse_filter('source_filter_b')
+
+    def _parse_filter(self, filter_name):
+        return self.control.config[filter_name]
 
     def parse_output_names(self):
         """Get list with necessary output table names.
@@ -1095,36 +1301,147 @@ class Parser():
                 tables.append(table)
         return tables
 
+    def parse_prerequisite_statement(self):
+        """Prepare prerequisite statement taken from the configuration table.
+
+        Returns
+        -------
+        final_statement : str or None
+            Formatted SQL query representing prerequisite statement.
+        """
+        return self._parse_statement('prerequisite_sql')
+
+    def parse_preparation_statement(self):
+        """Get preparation statement taken from the configuration table.
+
+        Returns
+        -------
+        final_statement : str or None
+            Formatted SQL query that must be performed before the control.
+        """
+        return self._parse_statement('preparation_sql')
+
+    def _parse_statement(self, statement_name):
+        custom_statement = self.control.config[statement_name]
+        if custom_statement:
+            custom_statement = custom_statement.format(**self.c.variables)
+            final_statement = db.formatter(custom_statement)
+            return final_statement
+
+    def parse_case_config(self):
+        """Get case mapping taken from the configuration table.
+
+        Returns
+        -------
+        config : dict or None
+            Dictionary with case mapping.
+        """
+        logger.debug(f'{self.c} Parsing case configuration...')
+        string = self.control.config['case_config']
+        if string:
+            case_list = [NORMAL, INFO, ERROR, WARNING, INCIDENT, DISCREPANCY]
+            custom_config = json.loads(string)
+            final_config = {}
+            for custom_record in custom_config:
+                i = custom_record['case_id']
+                case_id = custom_record['case_id']
+                case_value = custom_record['case_value']
+                case_type = custom_record.get('case_type')
+                case_description = custom_record.get('case_description')
+                final_record = {
+                    'case_id': case_id,
+                    'case_value': case_value,
+                    'case_type': case_type if case_type in case_list else None,
+                    'case_description': case_description
+                }
+                final_config[i] = final_record
+            logger.debug(f'{self.c} Case configuration parsed')
+            return final_config
+        else:
+            logger.debug(f'{self.c} Case configuration not found')
+
+    def parse_result_config(self):
+        """Get main result statement taken from the configuration table.
+
+        Returns
+        -------
+        config : str or None
+            SQL-like logical expression with a result mapping.
+        """
+        logger.debug(f'{self.c} Parsing result configuration...')
+        string = self.control.config['result_config']
+        if string:
+            custom_config = self.control.config['result_config']
+            final_config = db.formatter(custom_config)
+            logger.debug(f'{self.c} Result configuration parsed')
+            return final_config
+        else:
+            logger.debug(f'{self.c} Result configuration not found')
+
     def parse_analyze_error_config(self):
         """Get analyze error configuration.
 
         Returns
         -------
-        config : list
+        config : list or None
             List with dictionaries where presented all keys for discrapancies.
         """
         logger.debug(f'{self.c} Parsing error configuration...')
-        raw = self.control.config['error_config']
-        config = []
-        for item in json.loads(raw or '[]'):
-            connexion = item.get('connexion', 'and').upper()
-            column = item.get('column', '').lower()
-            column_a = item.get('column_a', '').lower()
-            column_b = item.get('column_b', '').lower()
-            relation = item.get('relation', '<>').upper()
-            value = item.get('value')
-            is_column = item.get('is_column', False)
+        string = self.control.config['error_config']
+        if utils.is_json(string):
+            config = self._parse_json_filter(string)
+            logger.debug(f'{self.c} Error configuration parsed')
+            return config
+        else:
+            logger.debug(f'{self.c} Error configuration not found')
 
-            config.append(
-                {'connexion': connexion,
-                 'column': column or None,
-                 'column_a': column_a or None,
-                 'column_b': column_b or None,
-                 'relation': relation,
-                 'value': value.lower() if is_column is True else value,
-                 'is_column': is_column})
-        logger.debug(f'{self.c} Error configuration parsed')
-        return config
+    def parse_analyze_error_sql(self):
+        """Prepare analyze error SQL expression.
+
+        Returns
+        -------
+        expression : str or None
+            String with SQL expression to select discrapancies.
+        """
+        logger.debug(f'{self.c} Parsing error SQL...')
+        string = self.control.config['error_config']
+        if utils.is_json(string):
+            table = self.control.input_table
+            expressions = []
+            config = self.parse_analyze_error_config()
+            for i in config:
+                expression = []
+                connexion = i['connexion']
+                if len(expressions) > 0:
+                    expression.append(connexion)
+                column = str(table.c[i['column']])
+                expression.append(column)
+                relation = i['relation']
+                expression.append(relation)
+                value = i['value']
+                is_column = i['is_column']
+                value = str(table.c[value]) if is_column else value
+                expression.append(value)
+                expression = ' '.join(expression)
+                expressions.append(expression)
+            expression = '\n'.join(expressions)
+            logger.debug(f'{self.c} Error SQL parsed using configuration')
+            return expression
+        elif utils.is_sql(string):
+            expression = self._parse_sql_filter(string)
+            logger.debug(f'{self.c} Error SQL parsed')
+            return expression
+        elif not string and self.control.has_cases:
+            table = self.control.input_table
+            result_type = table.c.rapo_result_type
+            target_types = [INFO, ERROR, WARNING, INCIDENT, DISCREPANCY]
+            clause = sa.or_(result_type.in_(target_types),
+                            result_type.is_(None))
+            statement = db.compile(clause)
+            expression = statement.string
+            return expression
+        else:
+            logger.debug(f'{self.c} Error SQL not found')
 
     def parse_reconciliation_rule_config(self):
         """Get control rule configuration.
@@ -1165,6 +1482,30 @@ class Parser():
             config.append(new)
         logger.debug(f'{self.c} Error configuration parsed')
         return config
+
+    def _parse_json_filter(self, string):
+        config = []
+        for item in json.loads(string or '[]'):
+            connexion = item.get('connexion', 'and').upper()
+            column = item.get('column', '').lower()
+            column_a = item.get('column_a', '').lower()
+            column_b = item.get('column_b', '').lower()
+            relation = item.get('relation', '<>').upper()
+            value = item.get('value')
+            is_column = item.get('is_column', False)
+
+            config.append(
+                {'connexion': connexion,
+                 'column': column or None,
+                 'column_a': column_a or None,
+                 'column_b': column_b or None,
+                 'relation': relation,
+                 'value': value.lower() if is_column is True else value,
+                 'is_column': is_column})
+        return config
+
+    def _parse_sql_filter(self, string):
+        return string
 
     def parse_output_columns(self):
         """Get control output columns.
@@ -1233,33 +1574,120 @@ class Parser():
             else:
                 logger.debug(f'{self.c} Output columns was not configured')
                 return None
-        pass
+
+    def parse_mandatory_columns(self):
+        """Get control mandatory columns."""
+        logger.debug(f'{self.c} Parsing mandatory columns...')
+        if self.control.is_analysis:
+            columns = [RESULT_KEY, RESULT_VALUE, RESULT_TYPE]
+            logger.debug(f'{self.c} Mandatory columns parsed')
+            return columns
+        else:
+            logger.debug(f'{self.c} Mandatory columns not defined')
+
+    def parse_result_columns(self):
+        """Get result columns based on result statement and case configuration.
+
+        Returns
+        -------
+        columns : List of sqlalchemy columns or None
+            Object representing result column.
+        """
+        logger.debug(f'{self.c} Parsing result columns...')
+        custom_statement = self.control.config['result_config']
+        if self.control.is_analysis and custom_statement:
+            columns = []
+            case_config = self.parse_case_config()
+
+            replaces = []
+            pattern = r'THEN\s+\d+|ELSE\s+\d+'
+            matches = re.findall(pattern, custom_statement, re.IGNORECASE)
+            for match in matches:
+                keyword, result = re.split(r'\s+', match)
+                case_id = int(result)
+                case_value = case_config[case_id]['case_value']
+                case_type = case_config[case_id]['case_type']
+
+                replace = [match, {}]
+                replace[1]['key'] = f'{keyword} {case_id}'
+                replace[1]['value'] = f'{keyword} \'{case_value}\''
+                replace[1]['type'] = f'{keyword} \'{case_type}\''
+                replaces.append(replace)
+
+            columns = []
+            for field in ['key', 'value', 'type']:
+                field_name = f'rapo_result_{field}'
+                final_statement = custom_statement
+                for replace in replaces:
+                    old = replace[0]
+                    new = replace[1][field]
+                    final_statement = final_statement.replace(old, new)
+                final_statement = db.formatter(final_statement)
+                column = sa.literal_column(final_statement).label(field_name)
+                columns.append(column)
+            logger.debug(f'{self.c} Result columns parsed')
+            return columns
+        elif self.control.is_analysis and not custom_statement:
+            columns = []
+            fields = [RESULT_KEY, RESULT_VALUE, RESULT_TYPE]
+            for field in fields:
+                column = field.null
+                columns.append(column)
+            logger.debug(f'{self.c} Result columns not configured')
+            return columns
+        else:
+            logger.debug(f'{self.c} Result columns not parsed')
+
+    def parse_key_column(self):
+        """Get process identification and description column.
+
+        Returns
+        -------
+        columns : sqlalchemy column
+            Object representing process identification column.
+        """
+        column = sa.literal(self.control.process_id).label('rapo_process_id')
+        return column
+
+    def parse_variables(self):
+        """Get control variables.
+
+        Returns
+        -------
+        variables : dict
+            Dictionary with control variables.
+        """
+        control = self.control
+        variables = dict(control_name=control.name,
+                         control_date=control.date,
+                         control_date_from=control.date_from,
+                         control_date_to=control.date_to,
+                         process_id=control.process_id)
+        return variables
 
     def parse_outdated_results(self):
         """Create list with tables and IDs of outdated control results."""
-        conn = db.connect()
         log = db.tables.log
         control_id = self.control.id
         days_retention = self.control.config['days_retention']
+        today = dt.date.today().strftime(r'%Y-%m-%d')
+        current_date = sa.func.to_date(today, 'YYYY-MM-DD')
+        target_date = current_date-days_retention
         for table in self.parse_output_tables():
             select = sa.select([log.c.process_id])
-            date = sa.func.trunc(sa.func.sysdate())-days_retention
             subq = sa.select([table.c.rapo_process_id])
             query = (select.where(log.c.control_id == control_id)
-                           .where(log.c.added < date)
+                           .where(log.c.added < target_date)
                            .where(log.c.process_id.in_(subq))
                            .order_by(log.c.process_id))
-            text = db.formatter(query)
+            text = db.formatter.document(query)
             logger.debug(f'{self.c} Searching outdated results in {table} '
                          f'with query:\n{text}')
-            result = conn.execute(query)
+            result = db.execute(query)
             pids = [row[0] for row in result]
             logger.debug(f'{self.c} Outdated results in {table}: {pids}')
             if pids:
                 yield (table, pids)
-        pass
-
-    pass
 
 
 class Executor():
@@ -1267,7 +1695,6 @@ class Executor():
 
     def __init__(self, bind):
         self.__bind = bind
-        pass
 
     @property
     def control(self):
@@ -1334,9 +1761,9 @@ class Executor():
             chosen engine.
         """
         logger.debug(f'{self.c} Analyzing...')
-        conn = db.connect()
         input_table = self.control.input_table
         output_columns = self.control.output_columns
+        mandatory_columns = self.control.mandatory_columns
         if output_columns is None or len(output_columns) == 0:
             select = input_table.select()
         else:
@@ -1345,32 +1772,20 @@ class Executor():
                 name = output_column['column']
                 column = input_table.c[name]
                 columns.append(column)
+            for mandatory_column in mandatory_columns:
+                name = mandatory_column.column_name
+                column = input_table.c[name]
+                columns.append(column)
             select = sa.select(columns)
-        texts = []
-        config = self.control.error_config
-        for item in config:
-            text = []
-            connexion = item['connexion']
-            if len(texts) > 0:
-                text.append(connexion)
-            column = str(input_table.c[item['column']])
-            text.append(column)
-            relation = item['relation']
-            text.append(relation)
-            value = item['value']
-            is_column = item['is_column']
-            value = str(input_table.c[value]) if is_column is True else value
-            text.append(value)
-            text = ' '.join(text)
-            texts.append(text)
-        select = select.where(sa.text('\n'.join(texts)))
 
         tablename = f'rapo_temp_err_{self.control.process_id}'
-        select = select.compile(bind=db.engine, compile_kwargs=db.ckwargs)
+        clause = sa.text(self.control.error_sql)
+        select = select.where(clause)
+        select = db.compile(select)
         ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
-        text = db.formatter(ctas)
+        text = db.formatter.document(ctas)
         logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
-        conn.execute(ctas)
+        db.execute(ctas)
         logger.debug(f'{self.c} {tablename} created')
 
         table = db.table(tablename)
@@ -1388,7 +1803,6 @@ class Executor():
         """
         logger.debug(f'{self.c} Defining matches...')
 
-        conn = db.connect()
         table_a = self.control.input_table_a
         table_b = self.control.input_table_b
 
@@ -1432,11 +1846,11 @@ class Executor():
             select = select.where(column_a == column_b)
 
         tablename = f'rapo_temp_md_{self.control.process_id}'
-        select = select.compile(bind=db.engine, compile_kwargs=db.ckwargs)
+        select = db.compile(select)
         ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
-        text = db.formatter(ctas)
+        text = db.formatter.document(ctas)
         logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
-        conn.execute(ctas)
+        db.execute(ctas)
         logger.debug(f'{self.c} {tablename} created')
 
         table = db.table(tablename)
@@ -1454,7 +1868,6 @@ class Executor():
         """
         logger.debug(f'{self.c} Defining mismatches...')
 
-        conn = db.connect()
         table_a = self.control.input_table_a
         table_b = self.control.input_table_b
 
@@ -1498,11 +1911,11 @@ class Executor():
             select = select.where(column_a != column_b)
 
         tablename = f'rapo_temp_nmd_{self.control.process_id}'
-        select = select.compile(bind=db.engine, compile_kwargs=db.ckwargs)
+        select = db.compile(select)
         ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
-        text = db.formatter(ctas)
+        text = db.formatter.document(ctas)
         logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
-        conn.execute(ctas)
+        db.execute(ctas)
         logger.debug(f'{self.c} {tablename} created')
 
         table = db.table(tablename)
@@ -1540,10 +1953,9 @@ class Executor():
         """
         logger.debug(f'{self.c} Counting errors...')
         if self.control.engine == 'DB':
-            conn = db.connect()
             table = self.control.error_table
             count = sa.select([sa.func.count()]).select_from(table)
-            errors = conn.execute(count).scalar()
+            errors = db.execute(count).scalar()
         logger.debug(f'{self.c} Errors counted')
         return errors
 
@@ -1557,10 +1969,9 @@ class Executor():
         """
         logger.debug(f'{self.c} Counting matched...')
         if self.control.engine == 'DB':
-            conn = db.connect()
             table = self.control.result_table
             count = sa.select([sa.func.count()]).select_from(table)
-            matched = conn.execute(count).scalar()
+            matched = db.execute(count).scalar()
         logger.debug(f'{self.c} Matched counted')
         return matched
 
@@ -1574,40 +1985,33 @@ class Executor():
         """
         logger.debug(f'{self.c} Counting mismatched')
         if self.control.engine == 'DB':
-            conn = db.connect()
             table = self.control.error_table
             count = sa.select([sa.func.count()]).select_from(table)
-            mismatched = conn.execute(count).scalar()
+            mismatched = db.execute(count).scalar()
         logger.debug(f'{self.c} Mismatched counted')
         return mismatched
 
     def save_results(self):
         """Save defined results as output records."""
         logger.debug(f'{self.c} Start saving...')
-        conn = db.connect()
         table = self.control.result_table
-        process_id = sa.literal(self.control.process_id)
-        select = sa.select([*table.columns,
-                            process_id.label('rapo_process_id')])
+        process_id = self.control.key_column
+        select = sa.select([*table.columns, process_id])
         table = self.prepare_output_table()
         insert = table.insert().from_select(table.columns, select)
-        conn.execute(insert)
+        db.execute(insert)
         logger.debug(f'{self.c} Saving done')
-        pass
 
     def save_errors(self):
         """Save defined errors as output records."""
         logger.debug(f'{self.c} Start saving...')
-        conn = db.connect()
         table = self.control.error_table
-        process_id = sa.literal(self.control.process_id)
-        select = sa.select([*table.columns,
-                            process_id.label('rapo_process_id')])
+        process_id = self.control.key_column
+        select = sa.select([*table.columns, process_id])
         table = self.prepare_output_table()
         insert = table.insert().from_select(table.columns, select)
-        conn.execute(insert)
+        db.execute(insert)
         logger.debug(f'{self.c} Saving done')
-        pass
 
     def save_matches(self):
         """Save found matches as RAPO results."""
@@ -1619,12 +2023,13 @@ class Executor():
 
     def delete_output_records(self):
         """Delete records saved as control results in DB table."""
-        conn = db.connect()
         for table in self.control.output_tables:
-            id = table.c.rapo_process_id
-            delete = table.delete().where(id == self.control.process_id)
-            conn.execute(delete)
-        pass
+            if self.control.with_deletion:
+                db.truncate(table)
+            else:
+                id = table.c.rapo_process_id
+                delete = table.delete().where(id == self.control.process_id)
+                db.execute(delete)
 
     def prepare_output_table(self):
         """Check RAPO_RESULT and create it at initial control run.
@@ -1635,13 +2040,19 @@ class Executor():
             Object reflecting RAPO_RESULT.
         """
         tablename = f'rapo_rest_{self.control.name}'.lower()
-        conn = db.connect()
-        if conn.engine.has_table(tablename) is False:
+        if self.control.with_deletion or self.control.with_drop:
+            if db.engine.has_table(tablename):
+                if self.control.with_deletion:
+                    db.truncate(tablename)
+                elif self.control.with_drop:
+                    db.drop(tablename)
+        if not db.engine.has_table(tablename):
             logger.debug(f'{self.c} Table {tablename} will be created')
 
             columns = []
             output_columns = self.control.output_columns
-            if output_columns is None or len(output_columns) == 0:
+            mandatory_columns = self.control.mandatory_columns
+            if not output_columns or len(output_columns) == 0:
                 if self.c.config['source_name'] is not None:
                     columns.extend(self.c.source_table.columns)
                 if self.c.config['source_name_a'] is not None:
@@ -1669,23 +2080,27 @@ class Executor():
                         table = self.control.source_table
                         column = table.c[name]
                     columns.append(column)
+            if mandatory_columns:
+                for mandatory_column in mandatory_columns:
+                    column = mandatory_column.null
+                    columns.append(column)
 
-            process_id = sa.literal(self.control.process_id)
-            columns = [*columns, process_id.label('rapo_process_id')]
+            process_id = self.control.key_column
+            columns = [*columns, process_id]
             select = sa.select(columns)
             select = select.where(sa.literal(1) == sa.literal(0))
-            select = select.compile(bind=db.engine, compile_kwargs=db.ckwargs)
+            select = db.compile(select)
             ctas = f'CREATE TABLE {tablename} AS\n{select}'
             index = (f'CREATE INDEX {tablename}_rapo_process_id_ix '
                      f'ON {tablename}(rapo_process_id) COMPRESS')
             compress = (f'ALTER TABLE {tablename} '
                         'MOVE ROW STORE COMPRESS ADVANCED')
-            text = db.formatter(ctas, index, compress)
+            text = db.formatter.document(ctas, index, compress)
             logger.debug(f'{self.c} Creating table {tablename} '
                          f'with query:\n{text}')
-            conn.execute(ctas)
-            conn.execute(index)
-            conn.execute(compress)
+            db.execute(ctas)
+            db.execute(index)
+            db.execute(compress)
             logger.debug(f'{self.c} {tablename} created')
         table = db.table(tablename)
         return table
@@ -1696,44 +2111,41 @@ class Executor():
         for table in self.control.temp_tables:
             table.drop(db.engine)
         logger.debug(f'{self.c} Temporary tables dropped')
-        pass
-
-    def hook(self):
-        """Execute database hook procedure."""
-        logger.debug(f'{self.c} Executing hook procedure...')
-        conn = db.connect()
-        process_id = self.control.process_id
-        stmt = sa.text(f'begin rapo_control_hook({process_id}); end;')
-        conn.execute(stmt)
-        logger.debug(f'{self.c} Hook procedure executed')
-        pass
 
     def prerun_hook(self):
         """Execute database prerun hook function."""
         logger.debug(f'{self.c} Executing prerun hook function...')
-        conn = db.connect()
         process_id = self.control.process_id
-        stmt = sa.text(f'select rapo_prerun_control_hook({process_id}) from dual')
+        select = f'select rapo_prerun_control_hook({process_id}) from dual'
+        stmt = sa.text(select)
         try:
-            result_code = conn.execute(stmt).first()[0]
+            result_code = db.execute(stmt).scalar()
             if result_code is None or result_code.upper() == 'OK':
                 logger.debug(f'{self.c} Hook function evaluated OK')
                 return True, result_code
             else:
-                logger.debug(f'{self.c} Hook function evaluated NOT OK ({result_code})')
+                logger.debug(f'{self.c} Hook function evaluated NOT OK '
+                             f'[{result_code}]')
                 return False, result_code
-        except Exception as e:
-            logger.error(f'{self.c} Error evaluating prerun hook: {e}')
-        pass
+        except Exception:
+            logger.error(f'{self.c} Error evaluating prerun hook')
+            logger.error()
+
+    def postrun_hook(self):
+        """Execute database postrun hook procedure."""
+        logger.debug(f'{self.c} Executing postrun hook procedure...')
+        process_id = self.control.process_id
+        stmt = sa.text(f'begin rapo_postrun_control_hook({process_id}); end;')
+        db.execute(stmt)
+        logger.debug(f'{self.c} Hook procedure executed')
 
     def _fetch_records_to_table(self, select, tablename):
         logger.debug(f'{self.c} Start fetching...')
-        conn = db.connect()
-        select = select.compile(bind=db.engine, compile_kwargs=db.ckwargs)
+        select = db.compile(select)
         ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
-        text = db.formatter(ctas)
+        text = db.formatter.document(ctas)
         logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
-        conn.execute(ctas)
+        db.execute(ctas)
         logger.info(f'{self.c} {tablename} created')
         table = db.table(tablename)
         logger.debug(f'{self.c} Fetching done')
@@ -1741,10 +2153,7 @@ class Executor():
 
     def _count_fetched_to_table(self, table):
         logger.debug(f'{self.c} Counting fetched in {table}...')
-        conn = db.connect()
         count = sa.select([sa.func.count()]).select_from(table)
-        fetched = conn.execute(count).scalar()
+        fetched = db.execute(count).scalar()
         logger.debug(f'{self.c} Fetched in {table} counted')
         return fetched
-
-    pass

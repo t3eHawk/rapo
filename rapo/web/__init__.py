@@ -49,11 +49,9 @@ class WEBAPI():
                 self.start()
             elif argv[0] == 'stop':
                 self.stop()
-        pass
 
     def start(self):
         """Start web API server."""
-        conn = db.connect()
         if self.status is True and self.pid and psutil.pid_exists(self.pid):
             message = f'web API already running at PID {self.pid}'
             raise Exception(message)
@@ -79,17 +77,14 @@ class WEBAPI():
                                             start_date=self.start_date,
                                             stop_date=self.stop_date,
                                             status='Y'))
-                conn.execute(update)
-                conn.close()
+                db.execute(update)
                 proc.wait()
             except KeyboardInterrupt:
-                conn = db.connect()
                 self.stop_date = dt.datetime.now()
                 update = (self.table.update()
                                     .values(stop_date=self.stop_date,
                                             status='N'))
-                conn.execute(update)
-                conn.close()
+                db.execute(update)
                 proc.terminate()
         else:
             script = 'waitress-serve'
@@ -105,13 +100,10 @@ class WEBAPI():
                                                 start_date=self.start_date,
                                                 stop_date=self.stop_date,
                                                 status='Y')
-            conn.execute(update)
-            conn.close()
-        pass
+            db.execute(update)
 
     def stop(self):
         """Stop web API server."""
-        conn = db.connect()
         if self.status is True:
             self.stop_date = dt.datetime.now()
             self.status = False
@@ -119,7 +111,4 @@ class WEBAPI():
                 os.kill(self.pid, signal.SIGTERM)
             update = self.table.update().values(stop_date=self.stop_date,
                                                 status='N')
-            conn.execute(update)
-        pass
-
-    pass
+            db.execute(update)

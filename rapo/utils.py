@@ -1,6 +1,8 @@
 """Contains application utils."""
 
 import datetime as dt
+import json
+import sqlalchemy as sa
 
 
 class Utils():
@@ -44,6 +46,78 @@ class Utils():
         """
         value = value.lower() if isinstance(value, str) is True else None
         return value
+
+    def is_config(self, value):
+        """Check if the given value is valid configuration object.
+
+        Parameters
+        ----------
+        value : Any
+            Some vale that must be checked.
+
+        Returns
+        -------
+        result : bool
+            Result of the check.
+        """
+        if isinstance(value, dict):
+            return True
+        else:
+            return False
+
+    def is_json(self, string):
+        """Check if the given string is a valid JSON object.
+
+        Parameters
+        ----------
+        string: str or Any
+            Some string that must be checked.
+
+        Returns
+        -------
+        result : bool
+            Result of the check.
+        """
+        try:
+            json.loads(string)
+        except (TypeError, ValueError):
+            return False
+        else:
+            return True
+
+    def is_sql(self, string):
+        """Check if the given string is a valid SQL object.
+
+        Parameters
+        ----------
+        string : str or Any
+
+        Returns
+        -------
+        result : bool
+            Result of the check.
+        """
+        if isinstance(string, str):
+            return True
+        else:
+            return False
+
+    def is_sqlalchemy(self, value):
+        """Check if the given value is a valid SQLAlchemy object.
+
+        Parameters
+        ----------
+        value : str or Any
+
+        Returns
+        -------
+        result : bool
+            Result of the check.
+        """
+        if isinstance(value, sa.sql.ClauseElement):
+            return True
+        else:
+            return False
 
 
 utils = Utils()

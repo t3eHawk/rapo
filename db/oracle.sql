@@ -82,6 +82,7 @@ create table rapo_config (
   need_postrun_hook   varchar2(1) default 'N' not null,
   preparation_sql     clob,
   prerequisite_sql    clob,
+  completion_sql      clob,
   status              varchar2(1) default 'N' not null,
   updated_by          varchar2(128),
   updated_date        date,

@@ -1442,6 +1442,7 @@ class Parser():
             return expression
         else:
             logger.debug(f'{self.c} Error SQL not found')
+            return ''
 
     def parse_reconciliation_rule_config(self):
         """Get control rule configuration.

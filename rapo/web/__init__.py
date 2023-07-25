@@ -56,11 +56,13 @@ class WEBAPI():
             message = f'web API already running at PID {self.pid}'
             raise Exception(message)
         app = f'{self.app.name}:app'
+        exe = sys.executable
+        dir = os.path.dirname(exe)
         env = os.environ.copy()
         self.start_date = dt.datetime.now()
         self.status = True
         if self.dev is True:
-            script = ['flask', 'run']
+            script = [os.path.join(dir, 'flask'), 'run']
             args = ['--host', self.host, '--port', str(self.port)]
             cmd = [arg for arg in [*script, *args] if arg is not None]
             env['FLASK_APP'] = app
@@ -87,7 +89,7 @@ class WEBAPI():
                 db.execute(update)
                 proc.terminate()
         else:
-            script = 'waitress-serve'
+            script = os.path.join(dir, 'waitress-serve')
             args = ['--host', self.host, '--port', str(self.port), app]
             cmd = [arg for arg in [script, *args] if arg is not None]
             proc = sp.Popen(cmd, env=env, stdout=sp.DEVNULL, stderr=sp.DEVNULL)

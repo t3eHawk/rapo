@@ -1897,19 +1897,21 @@ class Executor():
                 column = column.label(name) if name else column
                 columns.append(column)
 
-        keys = []
+        keys = None
         for rule in self.control.rule_config:
             column_a = table_a.c[rule['column_a']]
             column_b = table_b.c[rule['column_b']]
-            keys.append(column_a == column_b)
-        join = table_a.join(table_b, *keys)
+            if keys is None:
+                keys = (column_a == column_b)
+            else:
+                keys &= (column_a == column_b)
+        join = table_a.outerjoin(table_b, keys)
         select = sa.select(columns).select_from(join)
 
-        keys = []
         for error in self.control.error_config:
             column_a = table_a.c[error['column_a']]
             column_b = table_b.c[error['column_b']]
-            select = select.where(column_a != column_b)
+            select = select.where((column_a != column_b) | (column_b == None) )
 
         tablename = f'rapo_temp_nmd_{self.control.process_id}'
         select = db.compile(select)

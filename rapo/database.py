@@ -28,6 +28,7 @@ class Database():
         def __init__(self, database):
             self.database = database
             self.config = self.load('rapo_config')
+            self.config_bak = self.load('rapo_config_bak')
             self.log = self.load('rapo_log')
             self.scheduler = self.load('rapo_scheduler')
             self.web_api = self.load('rapo_web_api')

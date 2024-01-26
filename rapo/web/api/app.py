@@ -122,14 +122,8 @@ def get_control_versions():
 @app.route('/api/get-control-runs')
 @auth.login_required
 def get_control_runs():
-    """Get list of all control runs in JSON."""
-    request = flask.request
-    
-    for_date = datetime.now().date().isoformat()
-    if 'for_date' in request.args:
-        for_date = request.args['for_date']
-    
-    rows = reader.read_control_results_for_day(for_date)
+    """Get list of all control runs in JSON."""    
+    rows = reader.read_control_results_for_day()
     response = flask.jsonify(rows)
     return response
 

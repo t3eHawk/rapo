@@ -4,7 +4,7 @@ import sqlalchemy as sa
 
 from .database import db
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
 class Reader():
     """Represents application data reader.
@@ -139,11 +139,8 @@ class Reader():
         return rows
 
 
-    def read_control_results_for_day(self, for_day):
+    def read_control_results_for_day(self):
         """Get list of all control runs for the passed for_day."""
-
-        from_date = datetime.fromisoformat(for_day)
-        to_date = from_date + timedelta(days=1)
 
         # log = db.tables.log
         # config = db.tables.config
@@ -184,8 +181,8 @@ class Reader():
                 left join rapo_config c on l.control_id = c.control_id
                 where 1=1
                     and c.control_name is not null
-                    and added between to_date('{from_date}', 'yyyy-mm-dd hh24:mi:ss') and to_date('{to_date}', 'yyyy-mm-dd hh24:mi:ss')
-                order by process_id desc"""
+                order by process_id desc
+                fetch first 100 rows only"""
 
         result = db.execute(select)
         rows = [dict(row) for row in result]

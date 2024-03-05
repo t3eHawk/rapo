@@ -1,4 +1,4 @@
-# RAPO
+# Rapo
 
 [![version](https://img.shields.io/pypi/v/rapo)](https://pypi.org/project/rapo/)
 [![release](https://img.shields.io/github/v/release/t3eHawk/rapo?include_prereleases)](https://github.com/t3eHawk/rapo/)

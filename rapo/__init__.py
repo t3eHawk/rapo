@@ -6,11 +6,11 @@ from .web import WEBAPI
 
 
 __author__ = 'Timur Faradzhov'
-__copyright__ = 'Copyright 2023, The RAPO project'
+__copyright__ = 'Copyright 2024, The Rapo project'
 __credits__ = ['Timur Faradzhov', 'Kostadin Taneski']
 
 __license__ = 'MIT'
-__version__ = '0.4.4'
+__version__ = '0.5.0'
 __maintainer__ = 'Timur Faradzhov'
 __email__ = 'timurfaradzhov@gmail.com'
 __status__ = 'Development'

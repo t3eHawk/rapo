@@ -1,4 +1,4 @@
-"""Contains RAPO fields descriptors."""
+"""Contains built-in field descriptors."""
 
 import dataclasses as dc
 import sqlalchemy as sa
@@ -31,3 +31,5 @@ PROCESS_ID = Field('process_id', sa.Integer)
 RESULT_KEY = Field('result_key', sa.Integer)
 RESULT_VALUE = Field('result_value', sa.String(100))
 RESULT_TYPE = Field('result_type', sa.String(15))
+DISCREPANCY_ID = Field('discrepancy_id', sa.String(4000))
+DISCREPANCY_DESCRIPTION = Field('discrepancy_description', sa.String(4000))

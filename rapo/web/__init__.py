@@ -16,8 +16,8 @@ from ..database import db
 from ..reader import reader
 
 
-class WEBAPI():
-    """Represents RAPO web API."""
+class Server():
+    """Represents application server."""
 
     def __init__(self, host=None, port=None, dev=False):
         argv = sys.argv[1:].copy()

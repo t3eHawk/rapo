@@ -316,19 +316,25 @@ class Scheduler():
         table = db.tables.config
         select = table.select()
         result = db.execute(select)
-        for row in result:
+        schedule_keys = ['mday', 'wday', 'hour', 'min', 'sec']
+        for record in result:
             try:
-                name = row.control_name
-                status = True if row.status == 'Y' else False
-                schedule = {} if not row.schedule else json.loads(row.schedule)
-                record = {k: v for k, v in schedule.items()
-                          if k in ['mday', 'wday', 'hour', 'min', 'sec']}
-                record['status'] = status
+                control_name = record.control_name
+                control_status = True if record.status == 'Y' else False
+                schedule_config = dict.fromkeys(schedule_keys)
+                if record.schedule_config:
+                    input_config = json.loads(record.schedule_config)
+                    output_config = {
+                        key: value for key, value in input_config.items()
+                        if key in schedule_keys
+                    }
+                    schedule_config.update(output_config)
+                control_config = dict(**schedule_config, status=control_status)
             except Exception:
                 logger.warning()
                 continue
             else:
-                yield name, record
+                yield control_name, control_config
         logger.debug('Schedule retrieved')
 
     def _check(self, unit, now):
@@ -374,6 +380,7 @@ class Scheduler():
                 try:
                     control = Control(name, timestamp=moment)
                     control.run()
+                    control.iterate()
                 except Exception:
                     logger.error()
                 else:
@@ -394,6 +401,6 @@ class Scheduler():
         config = db.tables.config
         select = config.select().order_by(config.c.control_id)
         result = db.execute(select)
-        for row in result:
-            control = Control(name=row.control_name)
+        for record in result:
+            control = Control(name=record.control_name)
             control.clean()

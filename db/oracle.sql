@@ -1,5 +1,5 @@
 /*******************************************************************************
-Script to deploy RAPO schema in your Oracle database.
+Script to deploy Rapo schema in your Oracle database.
 Just run the script then check if all objects created successfully.
 *******************************************************************************/
 
@@ -10,17 +10,9 @@ create table rapo_ref_types (
 );
 insert into rapo_ref_types values ('ANL', 'Analysis');
 insert into rapo_ref_types values ('REC', 'Reconciliation');
+insert into rapo_ref_types values ('CMP', 'Comparison');
 insert into rapo_ref_types values ('REP', 'Report');
 insert into rapo_ref_types values ('KPI', 'Key Performance Indicator');
-commit;
-
-create table rapo_ref_subtypes (
-  type_code    varchar2(3) not null,
-  subtype_code varchar2(3) not null,
-  subtype_desc varchar2(30) not null,
-  constraint rapo_ref_subtypes_pk primary key (type_code, subtype_code)
-);
-insert into rapo_ref_subtypes values ('REC', 'MA', 'Matching');
 commit;
 
 create table rapo_ref_cases (
@@ -33,7 +25,10 @@ insert into rapo_ref_cases values ('Info', 'Within this case something found tha
 insert into rapo_ref_cases values ('Error', 'Within this case an error found that must be inspected');
 insert into rapo_ref_cases values ('Warning', 'Within this case a minor error found that should be inspected as soon as possible');
 insert into rapo_ref_cases values ('Incident', 'Within this case a critical error found that must investigated immediately');
+insert into rapo_ref_cases values ('Success', 'Within this case the successful test result is reached');
+insert into rapo_ref_cases values ('Loss', 'Within this case a data is lost');
 insert into rapo_ref_cases values ('Discrepancy', 'Within this case the difference between some values found');
+insert into rapo_ref_cases values ('Duplicate', 'Within this case a data is duplicated');
 commit;
 
 create table rapo_ref_engines (
@@ -48,11 +43,10 @@ commit;
 create table rapo_config (
   control_id          number(*, 0),
   control_name        varchar2(45) not null,
-  control_desc        varchar2(500),
+  control_description varchar2(500),
   control_alias       varchar2(90),
   control_group       varchar2(90),
   control_type        varchar2(30) not null,
-  control_subtype     varchar2(30),
   control_engine      varchar2(30) not null,
   source_name         varchar2(128),
   source_date_field   varchar2(128),
@@ -60,23 +54,34 @@ create table rapo_config (
   output_table        clob,
   source_name_a       varchar2(128),
   source_date_field_a varchar2(128),
+  source_key_field_a  varchar2(128),
   source_filter_a     clob,
+  source_type_a       varchar2(90),
   output_table_a      clob,
   source_name_b       varchar2(128),
   source_date_field_b varchar2(128),
+  source_key_field_b  varchar2(128),
   source_filter_b     clob,
+  source_type_b       varchar2(90),
   output_table_b      clob,
   rule_config         clob,
   case_config         clob,
-  result_config       clob,
-  error_config        clob,
+  case_definition     clob,
+  error_definition    clob,
   need_a              varchar2(1),
   need_b              varchar2(1),
-  schedule            clob,
-  days_back           number(*, 0) default 1 not null,
+  schedule_config     clob,
+  period_back         number(*, 0) default 1 not null,
+  period_number       number(*, 0) default 1 not null,
+  period_type         varchar2(1) default 'D' not null,
+  iteration_config    clob,
+  timeout             number(*, 0),
+  instance_limit      number(*, 0) default 1,
+  output_limit        number(*, 0),
   days_retention      number(*, 0) default 365 not null,
   with_deletion       varchar2(1) default 'N' not null,
   with_drop           varchar2(1) default 'N' not null,
+  parallelism         number(*, 0) default 4,
   need_hook           varchar2(1) default 'Y' not null,
   need_prerun_hook    varchar2(1) default 'N' not null,
   need_postrun_hook   varchar2(1) default 'N' not null,
@@ -92,9 +97,6 @@ create table rapo_config (
   constraint rapo_config_type_fk
     foreign key (control_type)
     references rapo_ref_types(type_code),
-  constraint rapo_config_subtype_fk
-    foreign key (control_type, control_subtype)
-    references rapo_ref_subtypes(type_code, subtype_code),
   constraint rapo_config_engine_fk
     foreign key (control_engine)
     references rapo_ref_engines(engine_code)
@@ -159,11 +161,10 @@ begin
     insert into rapo_config_bak values (
       :new.control_id,
       :new.control_name,
-      :new.control_desc,
+      :new.control_description,
       :new.control_alias,
       :new.control_group,
       :new.control_type,
-      :new.control_subtype,
       :new.control_engine,
       :new.source_name,
       :new.source_date_field,
@@ -171,28 +172,40 @@ begin
       :new.output_table,
       :new.source_name_a,
       :new.source_date_field_a,
+      :new.source_key_field_a,
       :new.source_filter_a,
+      :new.source_type_a,
       :new.output_table_a,
       :new.source_name_b,
       :new.source_date_field_b,
+      :new.source_key_field_b,
       :new.source_filter_b,
+      :new.source_type_b,
       :new.output_table_b,
       :new.rule_config,
       :new.case_config,
-      :new.result_config,
-      :new.error_config,
+      :new.case_definition,
+      :new.error_definition,
       :new.need_a,
       :new.need_b,
-      :new.schedule,
-      :new.days_back,
+      :new.schedule_config,
+      :new.period_back,
+      :new.period_number,
+      :new.period_type,
+      :new.iteration_config,
+      :new.timeout,
+      :new.instance_limit,
+      :new.output_limit,
       :new.days_retention,
       :new.with_deletion,
       :new.with_drop,
+      :new.parallelism,
       :new.need_hook,
       :new.need_prerun_hook,
       :new.need_postrun_hook,
       :new.preparation_sql,
       :new.prerequisite_sql,
+      :new.completion_sql,
       :new.status,
       :new.updated_by,
       :new.updated_date,
@@ -211,11 +224,10 @@ begin
     insert into rapo_config_bak values (
       :old.control_id,
       :old.control_name,
-      :old.control_desc,
+      :old.control_description,
       :old.control_alias,
       :old.control_group,
       :old.control_type,
-      :old.control_subtype,
       :old.control_engine,
       :old.source_name,
       :old.source_date_field,
@@ -223,28 +235,40 @@ begin
       :old.output_table,
       :old.source_name_a,
       :old.source_date_field_a,
+      :old.source_key_field_a,
       :old.source_filter_a,
+      :old.source_type_a,
       :old.output_table_a,
       :old.source_name_b,
       :old.source_date_field_b,
+      :old.source_key_field_b,
       :old.source_filter_b,
+      :old.source_type_b,
       :old.output_table_b,
       :old.rule_config,
       :old.case_config,
-      :old.result_config,
-      :old.error_config,
+      :old.case_definition,
+      :old.error_definition,
       :old.need_a,
       :old.need_b,
-      :old.schedule,
-      :old.days_back,
+      :old.schedule_config,
+      :old.period_back,
+      :old.period_number,
+      :old.period_type,
+      :old.iteration_config,
+      :old.timeout,
+      :old.instance_limit,
+      :old.output_limit,
       :old.days_retention,
       :old.with_deletion,
       :old.with_drop,
+      :old.parallelism,
       :old.need_hook,
       :old.need_prerun_hook,
       :old.need_postrun_hook,
       :old.preparation_sql,
       :old.prerequisite_sql,
+      :old.completion_sql,
       :old.status,
       :old.updated_by,
       :old.updated_date,
@@ -268,16 +292,16 @@ create table rapo_log (
   status             varchar2(1),
   date_from          date,
   date_to            date,
-  fetched            number(*, 0),
-  success            number(*, 0),
-  errors             number(*, 0),
+  fetched_number     number(*, 0),
+  success_number     number(*, 0),
+  error_number       number(*, 0),
   error_level        float,
-  fetched_a          number(*, 0),
-  fetched_b          number(*, 0),
-  success_a          number(*, 0),
-  success_b          number(*, 0),
-  errors_a           number(*, 0),
-  errors_b           number(*, 0),
+  fetched_number_a   number(*, 0),
+  fetched_number_b   number(*, 0),
+  success_number_a   number(*, 0),
+  success_number_b   number(*, 0),
+  error_number_a     number(*, 0),
+  error_number_b     number(*, 0),
   error_level_a      float,
   error_level_b      float,
   prerequisite_value number(*, 0),

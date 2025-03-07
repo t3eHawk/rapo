@@ -17,17 +17,23 @@ from ..logger import logger
 from ..reader import reader
 from ..utils import utils
 
-from .fields import RESULT_KEY, RESULT_VALUE, RESULT_TYPE
-from .case import NORMAL, INFO, ERROR, WARNING, INCIDENT, DISCREPANCY
+from .fields import (
+    RESULT_KEY, RESULT_VALUE, RESULT_TYPE, DISCREPANCY_ID,
+    DISCREPANCY_DESCRIPTION
+)
+from .case import (
+    NORMAL, INFO, ERROR, WARNING, INCIDENT, DISCREPANCY,
+    SUCCESS, LOSS, DUPLICATE
+)
 
 
 class Control():
-    """Represents certain RAPO control and acts like its API.
+    """Represents a control and acts like its API.
 
     Parameters
     ----------
     name : str, optional
-        Name of the control from RAPO_CONFIG.
+        Name of the control from configuration table.
     timestamp : float or None
         Timestamp of this process.
     date_from : str or datetime, optional
@@ -38,7 +44,7 @@ class Control():
     Attributes
     ----------
     name : str
-        Name of the control from RAPO_CONFIG.
+        Name of the control from configuration table.
     timestamp : float or None
         Timestamp of this process.
     parser : rapo.Parser
@@ -48,17 +54,17 @@ class Control():
     log : sqlalchemy.Table
         RAPO_LOG table object.
     config : sqlalchemy.RowProxy
-        RAPO_CONFIG record for this control.
+        configuration table record for this control.
     id : int
-        ID of the control from RAPO_CONFIG.
+        ID of the control from configuration table.
     group : str or None
-        Group of the control from RAPO_CONFIG.
+        Group of the control from configuration table.
     type : str or None
-        Type of the control from RAPO_CONFIG. See RAPO_REF_TYPES table.
-    subtype: str or None
-        Method of the control from RAPO_CONFIG. See RAPO_REF_METHODS table.
+        Type of the control from configuration table. See reference types
+        table.
     engine : str or None
-        Engine of the control from RAPO_CONFIG. See RAPO_REF_ENGINES table.
+        Engine of the control from configuration table. See reference engines
+        table.
     process_id : int or None
         Process id from RAPO_LOG.
     pid : int or None
@@ -91,7 +97,7 @@ class Control():
         SQL statement to fetch data from data source B.
     rule_config : list
         Configuration defining success result.
-    error_config : list
+    error_definition : list
         Configuration defining error result.
     output_columns : list or None
         Output column configuration.
@@ -127,26 +133,26 @@ class Control():
         Proxy object reflecting table with found discrapancies from A.
     error_table_b : sqlalchemy.Table
         Proxy object reflecting table with found discrapancies from B.
-    fetched : int or None
+    fetched_number : int or None
         Number of fetched records from data source.
-    success : int or None
+    success_number : int or None
         Number of success results.
-    errors : int or None
+    error_number : int or None
         Number of discrapancies.
     error_level : float or None
         Indicator presenting the percentage of discrapancies among the fetched
         records.
-    fetched_a : int or None
+    fetched_number_a : int or None
         Number of fetched records from data source A.
-    fetched_b : int or None
+    fetched_number_b : int or None
         Number of fetched records from data source B.
-    success_a : int or None
+    success_number_a : int or None
         Number of success results in A.
-    success_b : int or None
+    success_number_b : int or None
         Number of success results in B.
-    errors_a : int or None
+    error_number_a : int or None
         Number of discrapancies in A.
-    errors_b : int or None
+    error_number_b : int or None
         Number of discrapancies in B.
     error_level_a : float or None
         Indicator presenting the percentage of discrapancies among the fetched
@@ -161,16 +167,14 @@ class Control():
     """
 
     def __init__(self, name=None, timestamp=None, process_id=None,
-                 date=None, date_from=None, date_to=None):
+                 iteration_id=None, date=None, date_from=None, date_to=None):
         self.name = name or reader.read_control_name(process_id)
         self.config = reader.read_control_config(self.name)
         self.result = reader.read_control_result(process_id)
         self.id = int(self.config['control_id'])
         self.group = self.config['control_group']
         self.type = self.config['control_type']
-        self.subtype = self.config['control_subtype']
         self.engine = self.config['control_engine']
-        self.timestamp = timestamp
 
         self.parser = Parser(self)
         self.executor = Executor(self)
@@ -185,20 +189,22 @@ class Control():
             self.updated = self.result['updated']
             self.status = self.result['status']
 
+            self.iteration_id = None
+            self.timestamp = None
             self.date_from = self.result['date_from']
             self.date_to = self.result['date_to']
 
-            self.fetched = self.result['fetched']
-            self.success = self.result['success']
-            self.errors = self.result['errors']
+            self.fetched_number = self.result['fetched_number']
+            self.success_number = self.result['success_number']
+            self.error_number = self.result['error_number']
             self.error_level = self.result['error_level']
 
-            self.fetched_a = self.result['fetched_a']
-            self.fetched_b = self.result['fetched_b']
-            self.success_a = self.result['success_a']
-            self.success_b = self.result['success_b']
-            self.errors_a = self.result['errors_a']
-            self.errors_b = self.result['errors_b']
+            self.fetched_number_a = self.result['fetched_number_a']
+            self.fetched_number_b = self.result['fetched_number_b']
+            self.success_number_a = self.result['success_number_a']
+            self.success_number_b = self.result['success_number_b']
+            self.error_number_a = self.result['error_number_a']
+            self.error_number_b = self.result['error_number_b']
             self.error_level_a = self.result['error_level_a']
             self.error_level_b = self.result['error_level_b']
         else:
@@ -207,6 +213,19 @@ class Control():
             self.updated = None
             self.status = None
 
+            self.iteration_id = iteration_id
+            if self.iteration_id:
+                iteration_config = utils.get_config(self.iteration_id,
+                                                    self.iteration_config)
+                self.period_back = iteration_config['period_back']
+                self.period_number = iteration_config['period_number']
+                self.period_type = iteration_config['period_type']
+            else:
+                self.period_back = self.config['period_back']
+                self.period_number = self.config['period_number']
+                self.period_type = self.config['period_type']
+
+            self.timestamp = timestamp
             if self.timestamp:
                 self.date_from, self.date_to = self.parser.parse_dates()
             elif date:
@@ -216,19 +235,19 @@ class Control():
                 self.date_from = self.parser.parse_date(date_from)
                 self.date_to = self.parser.parse_date(date_to)
 
-            self.fetched = None
-            self.success = None
-            self.errors = None
+            self.fetched_number = None
+            self.success_number = None
+            self.error_number = None
             self.error_level = None
 
-            self.fetched_a = None
-            self.success_a = None
-            self.errors_a = None
+            self.fetched_number_a = None
+            self.success_number_a = None
+            self.error_number_a = None
             self.error_level_a = None
 
-            self.fetched_b = None
-            self.success_b = None
-            self.errors_b = None
+            self.fetched_number_b = None
+            self.success_number_b = None
+            self.error_number_b = None
             self.error_level_b = None
 
         self.source_table = None
@@ -243,6 +262,8 @@ class Control():
         self.error_table = None
         self.error_table_a = None
         self.error_table_b = None
+        self.result_table_a = None
+        self.result_table_b = None
 
         self.output_table = None
         self.output_table_a = None
@@ -260,7 +281,7 @@ class Control():
         value : str
             Control name with or withoud process id.
         """
-        if self.process_id is None:
+        if not self.process_id:
             return f'[{self.name}]'
         else:
             return f'[{self.name}:{self.process_id}]'
@@ -337,6 +358,11 @@ class Control():
         return utils.to_lower(self.config['source_date_field_a'])
 
     @property
+    def source_key_field_a(self):
+        """Get control data source A key field."""
+        return utils.to_lower(self.config['source_key_field_a'])
+
+    @property
     def source_name_b(self):
         """Get control data source B name."""
         return self.parser.parse_source_name_b()
@@ -350,6 +376,11 @@ class Control():
     def source_date_field_b(self):
         """Get control data source B date field."""
         return utils.to_lower(self.config['source_date_field_b'])
+
+    @property
+    def source_key_field_b(self):
+        """Get control data source B key field."""
+        return utils.to_lower(self.config['source_key_field_b'])
 
     @property
     def result_columns(self):
@@ -388,6 +419,14 @@ class Control():
             raise ValueError(message)
 
     @property
+    def duration(self):
+        """Get control duration."""
+        if self.end_date:
+            return (self.end_date-self.start_date).seconds
+        current_date = dt.datetime.now()
+        return (current_date-self.start_date).seconds
+
+    @property
     def initiated(self):
         """Check if control is initiated."""
         if self.status == 'I':
@@ -402,6 +441,14 @@ class Control():
             return True
         else:
             return False
+
+    @property
+    def timeout(self):
+        """Check if control time limit is reached."""
+        time_limit = self.config['timeout']
+        if self.duration > time_limit:
+            return True
+        return False
 
     @property
     def select(self):
@@ -449,25 +496,39 @@ class Control():
         return True if self.type == 'REC' else False
 
     @property
+    def is_comparison(self):
+        """Identify whether control is comparison or not."""
+        return True if self.type == 'CMP' else False
+
+    @property
     def is_report(self):
         """Identify whether control is report or not."""
-        return True if self.type == 'ANL' else False
+        return True if self.type == 'REP' else False
 
     @property
     def has_cases(self):
         """Identify whether control is case-configured or not."""
-        if self.config['result_config'] and self.config['case_config']:
+        if self.config['case_config'] and self.config['case_definition']:
+            return True
+        return False
+
+    @property
+    def has_iterations(self):
+        """Identify whether control is iteration-configured or not."""
+        if self.config['iteration_config']:
             return True
         return False
 
     @property
     def rule_config(self):
         """Get control match configuration."""
-        if self.type == 'ANL':
+        if self.is_analysis:
             return []
-        elif self.type == 'REC':
+        elif self.is_reconciliation:
             return self.parser.parse_reconciliation_rule_config()
-        elif self.type == 'REP':
+        elif self.is_comparison:
+            return self.parser.parse_comparison_rule_config()
+        elif self.is_report:
             return []
 
     @property
@@ -476,25 +537,32 @@ class Control():
         return self.parser.parse_case_config()
 
     @property
-    def result_config(self):
-        """Get control result configuration."""
-        return self.parser.parse_result_config()
+    def case_definition(self):
+        """Get control result definition."""
+        return self.parser.parse_case_definition()
 
     @property
-    def error_config(self):
-        """Get control error configuration."""
-        if self.type == 'ANL':
-            return self.parser.parse_analyze_error_config()
-        elif self.type == 'REC':
-            return self.parser.parse_reconciliation_error_config()
-        elif self.type == 'REP':
+    def error_definition(self):
+        """Get control error definition."""
+        if self.is_analysis:
+            return self.parser.parse_analyze_error_definition()
+        elif self.is_reconciliation:
+            return []
+        elif self.is_comparison:
+            return self.parser.parse_comparison_error_definition()
+        elif self.is_report:
             return []
 
     @property
     def error_sql(self):
         """Get control error SQL expression."""
-        if self.type == 'ANL':
+        if self.is_analysis:
             return self.parser.parse_analyze_error_sql()
+
+    @property
+    def iteration_config(self):
+        """Get control iteration configuration."""
+        return self.parser.parse_iteration_config()
 
     @property
     def output_columns(self):
@@ -515,6 +583,11 @@ class Control():
     def mandatory_columns(self):
         """Get control mandatory output columns configuration."""
         return self.parser.parse_mandatory_columns()
+
+    @property
+    def parallelism(self):
+        """Get parameter describing execution parallelism."""
+        return self.config['parallelism']
 
     @property
     def need_a(self):
@@ -570,6 +643,19 @@ class Control():
         logger.debug(f'{self} Running control...')
         if self._initiate():
             self._spawn()
+
+    def iterate(self):
+        """Run all additional control iterations."""
+        for case in self.iteration_config:
+            iteration_id = case['iteration_id']
+            iteration_status = case['status']
+            if iteration_status:
+                logger.info(f'{self} Iterating control '
+                            f'using configuration {case}')
+                control = self.__class__(name=self.name,
+                                         timestamp=self.timestamp,
+                                         iteration_id=iteration_id)
+                control.run()
 
     def prerequisite(self):
         """Get the result of the prerequisite statement."""
@@ -679,8 +765,9 @@ class Control():
                         if self._start():
                             if self._progress():
                                 if self._finish():
-                                    if self._done():
-                                        self._postrun_hook()
+                                    if self._complete():
+                                        if self._done():
+                                            self._postrun_hook()
                 else:
                     self._do_not_resume()
             else:
@@ -718,6 +805,11 @@ class Control():
                 self.process = process
                 self._terminate()
                 self._cancel()
+            elif control.timeout:
+                logger.info(f'{self} Control cancelation with timeout ')
+                self.process = process
+                self._terminate()
+                self._cancel()
             tm.sleep(5)
             self.__dict__.update(control.__dict__)
 
@@ -743,9 +835,9 @@ class Control():
             self.status = 'S'
             self.start_date = dt.datetime.now()
             self._update(status=self.status, start_date=self.start_date)
-            if self.type in ('ANL', 'REP'):
+            if self.is_analysis or self.is_report:
                 self.source_table = self.parser.parse_source_table()
-            elif self.type == 'REC':
+            elif self.is_reconciliation or self.is_comparison:
                 self.source_table_a = self.parser.parse_source_table_a()
                 self.source_table_b = self.parser.parse_source_table_b()
         except Exception:
@@ -780,6 +872,22 @@ class Control():
         else:
             logger.info(f'{self} Control finished')
             return self._continue()
+
+    def _complete(self):
+        statement = self.parser.parse_completion_statement()
+        if statement:
+            logger.info(f'{self} Running control completion SQL scripts...')
+            try:
+                result = db.execute(statement)
+                rowcount = result.rowcount
+                logger.info(f'{self} Control completion SQL scripts '
+                            f'successfully performed returning {rowcount}')
+            except Exception:
+                logger.error()
+                return self._escape()
+            else:
+                return self._continue()
+        return self._continue()
 
     def _cancel(self):
         logger.info(f'{self} Canceling control...')
@@ -826,18 +934,18 @@ class Control():
 
     def _fetch(self):
         logger.info(f'{self} Fetching records...')
-        if self.type in ('ANL', 'REP'):
+        if self.is_analysis or self.is_report:
             logger.info(f'{self} Fetching {self.source_name}...')
             self.input_table = self.executor.fetch_records()
-            self.fetched = self.executor.count_fetched()
-            logger.info(f'{self} Records fetched: {self.fetched}')
-            self._update(fetched=self.fetched)
-        elif self.type == 'REC':
+            self.fetched_number = self.executor.count_fetched()
+            logger.info(f'{self} Records fetched: {self.fetched_number}')
+            self._update(fetched_number=self.fetched_number)
+        elif self.is_reconciliation or self.is_comparison:
             threads = []
             current = th.current_thread()
-            for attr in ('_fetch_a', '_fetch_b'):
-                name = f'{current.name}({attr[1:]})'
-                func = getattr(self, attr)
+            for s in ['a', 'b']:
+                name = f'{current.name}(fetch_{s})'
+                func = getattr(self, f'_fetch_{s}')
                 thread = th.Thread(target=func, name=name, daemon=True)
                 thread.start()
                 threads.append(thread)
@@ -845,47 +953,85 @@ class Control():
                 thread.join()
                 if self._pending_error is not None:
                     raise self._pending_error
-            self._update(fetched_a=self.fetched_a, fetched_b=self.fetched_b)
+            self._update(fetched_number_a=self.fetched_number_a,
+                         fetched_number_b=self.fetched_number_b)
 
     def _fetch_a(self):
         try:
             self.__fetch_a()
+            if self.is_reconciliation:
+                self.__index_a()
         except Exception as error:
             self._pending_error = error
 
     def __fetch_a(self):
         logger.info(f'{self} Fetching {self.source_name_a}...')
         self.input_table_a = self.executor.fetch_records_a()
-        self.fetched_a = self.executor.count_fetched_a()
-        logger.info(f'{self} Records fetched A: {self.fetched_a}')
+        self.fetched_number_a = self.executor.count_fetched_a()
+        logger.info(f'{self} Records fetched A: {self.fetched_number_a}')
 
     def _fetch_b(self):
         try:
             self.__fetch_b()
+            if self.is_reconciliation:
+                self.__index_b()
         except Exception as error:
             self._pending_error = error
 
     def __fetch_b(self):
         logger.info(f'{self} Fetching {self.source_name_b}...')
         self.input_table_b = self.executor.fetch_records_b()
-        self.fetched_b = self.executor.count_fetched_b()
-        logger.info(f'{self} Records fetched B: {self.fetched_b}')
+        self.fetched_number_b = self.executor.count_fetched_b()
+        logger.info(f'{self} Records fetched B: {self.fetched_number_b}')
+
+    def __index_a(self):
+        logger.info(f'{self} Indexing data from {self.source_name_a}...')
+        self.executor.index_records_a()
+        logger.info(f'{self} Data from {self.source_name_a} indexed')
+
+    def __index_b(self):
+        logger.info(f'{self} Indexing data from {self.source_name_b}...')
+        self.executor.index_records_b()
+        logger.info(f'{self} Data from {self.source_name_b} indexed')
 
     def _execute(self):
         logger.info(f'{self} Executing control...')
-        if self.type == 'ANL':
-            if self.fetched or 0 > 0:
+        if self.is_analysis:
+            if (self.fetched_number or 0) > 0:
                 self.error_table = self.executor.analyze()
-                self.errors = self.executor.count_errors()
-                self.success = self.fetched-self.errors
-                self.error_level = (self.errors/self.fetched)*100
-                self._update(errors=self.errors,
-                             success=self.success,
+                self.error_number = self.executor.count_errors()
+                self.error_level = (self.error_number/self.fetched_number)*100
+                self.success_number = self.fetched_number-self.error_number
+                self._update(success_number=self.success_number,
+                             error_number=self.error_number,
                              error_level=self.error_level)
-        elif self.type == 'REP':
-            if self.fetched or 0 > 0:
-                self.error_table = self.executor.analyze()
-        elif self.type == 'REC' and self.subtype == 'MA':
+        elif self.is_reconciliation:
+            if (
+                (self.fetched_number_a or 0) > 0 or
+                (self.fetched_number_b or 0) > 0
+            ):
+                self.executor.reconsolidate()
+                error_tables = self.parser.parse_error_tables()
+                result_tables = self.parser.parse_result_tables()
+                self.error_table_a, self.error_table_b = error_tables
+                self.result_table_a, self.result_table_b = result_tables
+                if self.need_a:
+                    self.error_number_a = self.executor.count_errors_a()
+                    if self.error_number_a is not None:
+                        self.error_level_a = (self.error_number_a/self.fetched_number_a)*100
+                        self.success_number_a = self.fetched_number_a-self.error_number_a
+                if self.need_b:
+                    self.error_number_b = self.executor.count_errors_b()
+                    if self.error_number_b is not None:
+                        self.error_level_b = (self.error_number_b/self.fetched_number_b)*100
+                        self.success_number_b = self.fetched_number_b-self.error_number_b
+                self._update(success_number_a=self.success_number_a,
+                             success_number_b=self.success_number_b,
+                             error_number_a=self.error_number_a,
+                             error_number_b=self.error_number_b,
+                             error_level_a=self.error_level_a,
+                             error_level_b=self.error_level_b)
+        elif self.is_comparison:
             threads = []
             current = th.current_thread()
             for action in ('match', 'mismatch'):
@@ -898,10 +1044,13 @@ class Control():
                 thread.join()
                 if self._pending_error is not None:
                     raise self._pending_error
-            self.error_level = (self.errors/(self.success+self.errors))*100
-            self._update(errors=self.errors,
-                         success=self.success,
+            self.error_level = (self.error_number/(self.success_number+self.error_number))*100
+            self._update(success_number=self.success_number,
+                         error_number=self.error_number,
                          error_level=self.error_level)
+        elif self.is_report:
+            if (self.fetched_number or 0) > 0:
+                self.error_table = self.executor.analyze()
         logger.info(f'{self} Control executed')
 
     def _match(self):
@@ -912,7 +1061,7 @@ class Control():
 
     def __match(self):
         self.result_table = self.executor.match()
-        self.success = self.executor.count_matched()
+        self.success_number = self.executor.count_matched()
 
     def _mismatch(self):
         try:
@@ -922,20 +1071,24 @@ class Control():
 
     def __mismatch(self):
         self.error_table = self.executor.mismatch()
-        self.errors = self.executor.count_mismatched()
+        self.error_number = self.executor.count_mismatched()
 
     def _save(self):
         logger.info(f'{self} Saving results...')
-        if self.type == 'ANL':
-            if self.errors or 0 > 0:
+        if self.is_analysis:
+            if self.error_number or 0 > 0:
                 self.executor.save_errors()
-        elif self.type == 'REP':
-            if self.fetched or 0 > 0:
+        elif self.is_reconciliation:
+            if self.need_a:
+                self.executor.save_reconciliation_output_a()
+            if self.need_b:
+                self.executor.save_reconciliation_output_b()
+        elif self.is_comparison:
+            if self.error_number or 0 > 0:
+                self.executor.save_mismatches()
+        elif self.is_report:
+            if self.fetched_number or 0 > 0:
                 self.executor.save_errors()
-        elif self.type == 'REC':
-            if self.subtype == 'MA':
-                if self.errors or 0 > 0:
-                    self.executor.save_mismatches()
         logger.info(f'{self} Results saved')
 
     def _delete(self):
@@ -1049,10 +1202,7 @@ class Parser():
 
     def parse_dates(self):
         """Parse control dates according to configuration."""
-        days_back = self.control.config['days_back']
-        date_from = self.parse_date_from()-dt.timedelta(days=days_back)
-        date_to = self.parse_date_to()-dt.timedelta(days=days_back)
-        return (date_from, date_to)
+        return (self.parse_date_from(), self.parse_date_to())
 
     def parse_date_from(self):
         """Get data source date lower bound.
@@ -1063,8 +1213,21 @@ class Parser():
             Fetched records from data source should begin from this date.
         """
         timestamp = self.control.timestamp
-        date = self._parse_date(timestamp, 0, 0, 0)
-        return date
+        period_back = self.control.period_back
+        period_type = self.control.period_type
+        current_date = self._parse_date(timestamp, 0, 0, 0)
+        if period_type == 'D':
+            target_date = current_date-dt.timedelta(days=period_back)
+        elif period_type == 'M':
+            calculated_date = utils.get_month_date_from(current_date)
+            while period_back:
+                calculated_date = calculated_date-dt.timedelta(days=1)
+                calculated_date = utils.get_month_date_from(calculated_date)
+                period_back -= 1
+            target_date = calculated_date.replace()
+        elif period_type == 'W':
+            target_date = current_date-dt.timedelta(weeks=period_back)
+        return target_date
 
     def parse_date_to(self):
         """Get data source date upper bound.
@@ -1072,9 +1235,22 @@ class Parser():
         date_to : datetime or None
             Fetched records from data source should end with this date.
         """
-        timestamp = self.control.timestamp
-        date = self._parse_date(timestamp, 23, 59, 59)
-        return date
+        period_number = self.control.period_number
+        period_type = self.control.period_type
+        current_date = self._parse_date(self.parse_date_from(), 23, 59, 59)
+        if period_type == 'D':
+            target_date = current_date+dt.timedelta(days=period_number-1)
+        elif period_type == 'M':
+            calculated_date = utils.get_month_date_to(current_date)
+            while period_number-1:
+                calculated_date = calculated_date+dt.timedelta(days=1)
+                calculated_date = utils.get_month_date_to(calculated_date)
+                period_number -= 1
+            target_date = calculated_date.replace()
+        elif period_type == 'W':
+            calculated_date = current_date+dt.timedelta(weeks=period_number)
+            target_date = calculated_date-dt.timedelta(days=1)
+        return target_date
 
     def parse_source_name(self):
         """Get data source name."""
@@ -1197,9 +1373,17 @@ class Parser():
         if isinstance(date_field, str):
             column = table.c[date_field]
 
+            date_from = self.control.date_from
+            date_to = self.control.date_to
+            if self.control.is_reconciliation:
+                time_shift_from = self.control.rule_config['time_shift_from']
+                time_shift_to = self.control.rule_config['time_shift_to']
+                date_from = date_from+dt.timedelta(seconds=time_shift_from)
+                date_to = date_to+dt.timedelta(seconds=time_shift_to)
+
             datefmt = '%Y-%m-%d %H:%M:%S'
-            date_from = self.control.date_from.strftime(datefmt)
-            date_to = self.control.date_to.strftime(datefmt)
+            date_from = date_from.strftime(datefmt)
+            date_to = date_to.strftime(datefmt)
 
             datefmt = 'YYYY-MM-DD HH24:MI:SS'
             date_from = sa.func.to_date(date_from, datefmt)
@@ -1227,6 +1411,32 @@ class Parser():
     def _parse_filter(self, filter_name):
         return self.control.config[filter_name]
 
+    def parse_error_tables(self):
+        """Get control run error tables."""
+        if self.control.is_reconciliation:
+            table_name_a = f'rapo_temp_err_a_{self.control.process_id}'
+            table_name_b = f'rapo_temp_err_b_{self.control.process_id}'
+            return self._parse_tables(table_name_a, table_name_b)
+
+    def parse_result_tables(self):
+        """Get control run result tables."""
+        if self.control.is_reconciliation:
+            table_name_a = f'rapo_temp_res_a_{self.control.process_id}'
+            table_name_b = f'rapo_temp_res_b_{self.control.process_id}'
+            return self._parse_tables(table_name_a, table_name_b)
+
+    def _parse_tables(self, *table_names):
+        tables = []
+        for table_name in table_names:
+            table = self._parse_table(table_name)
+            tables.append(table)
+        return tables
+
+    def _parse_table(self, table_name):
+        if db.engine.has_table(table_name):
+            table = db.table(table_name)
+            return table
+
     def parse_output_names(self):
         """Get list with necessary output table names.
 
@@ -1236,16 +1446,13 @@ class Parser():
             List necessary output names.
         """
         names = []
-        if (
-            self.control.type == 'ANL'
-            or (
-                self.control.type == 'REC'
-                and self.control.subtype == 'MA'
-            )
-            or self.control.type == 'REP'
-        ):
+        if self.control.type in ['ANL', 'CMP', 'REP']:
             name = f'rapo_rest_{self.control.name}'.lower()
             names.append(name)
+        if self.control.type == 'REC':
+            for s in ['a', 'b']:
+                name = f'rapo_res{s}_{self.control.name}'.lower()
+                names.append(name)
         return names
 
     def parse_output_tables(self):
@@ -1276,14 +1483,26 @@ class Parser():
         fda = f'rapo_temp_fda_{self.control.process_id}'
         fdb = f'rapo_temp_fdb_{self.control.process_id}'
         err = f'rapo_temp_err_{self.control.process_id}'
+        comb = f'rapo_temp_comb_{self.control.process_id}'
+        nfa = f'rapo_temp_nf_a_{self.control.process_id}'
+        nfb = f'rapo_temp_nf_b_{self.control.process_id}'
+        dup = f'rapo_temp_dup_{self.control.process_id}'
+        dupa = f'rapo_temp_dup_a_{self.control.process_id}'
+        dupb = f'rapo_temp_dup_b_{self.control.process_id}'
+        erra = f'rapo_temp_err_a_{self.control.process_id}'
+        errb = f'rapo_temp_err_b_{self.control.process_id}'
+        resa = f'rapo_temp_res_a_{self.control.process_id}'
+        resb = f'rapo_temp_res_b_{self.control.process_id}'
         md = f'rapo_temp_md_{self.control.process_id}'
         nmd = f'rapo_temp_nmd_{self.control.process_id}'
-        if self.control.type == 'ANL':
+        if self.control.is_analysis:
             names.extend([fd, err])
-        elif self.control.type == 'REP':
-            names.append(fd)
-        elif self.control.type == 'REC' and self.control.subtype == 'MA':
+        elif self.control.is_reconciliation:
+            names.extend([fda, fdb, comb, nfa, nfb, dup, dupa, dupb])
+        elif self.control.is_comparison:
             names.extend([fda, fdb, md, nmd])
+        elif self.control.is_report:
+            names.append(fd)
         return names
 
     def parse_temp_tables(self):
@@ -1321,6 +1540,16 @@ class Parser():
         """
         return self._parse_statement('preparation_sql')
 
+    def parse_completion_statement(self):
+        """Get completion statement taken from the configuration table.
+
+        Returns
+        -------
+        final_statement : str or None
+            Formatted SQL query that must be performed after the control.
+        """
+        return self._parse_statement('completion_sql')
+
     def _parse_statement(self, statement_name):
         custom_statement = self.control.config[statement_name]
         if custom_statement:
@@ -1339,7 +1568,8 @@ class Parser():
         logger.debug(f'{self.c} Parsing case configuration...')
         string = self.control.config['case_config']
         if string:
-            case_list = [NORMAL, INFO, ERROR, WARNING, INCIDENT, DISCREPANCY]
+            case_list = [NORMAL, INFO, ERROR, WARNING, INCIDENT, DISCREPANCY,
+                         SUCCESS, LOSS, DUPLICATE]
             custom_config = json.loads(string)
             final_config = {}
             for custom_record in custom_config:
@@ -1360,40 +1590,40 @@ class Parser():
         else:
             logger.debug(f'{self.c} Case configuration not found')
 
-    def parse_result_config(self):
-        """Get main result statement taken from the configuration table.
+    def parse_case_definition(self):
+        """Get main case statement taken from the configuration table.
 
         Returns
         -------
         config : str or None
-            SQL-like logical expression with a result mapping.
+            SQL-like logical expression with a case mapping.
         """
-        logger.debug(f'{self.c} Parsing result configuration...')
-        string = self.control.config['result_config']
+        logger.debug(f'{self.c} Parsing case definition...')
+        string = self.control.config['case_definition']
         if string:
-            custom_config = self.control.config['result_config']
+            custom_config = self.control.config['case_definition']
             final_config = db.formatter(custom_config)
-            logger.debug(f'{self.c} Result configuration parsed')
+            logger.debug(f'{self.c} Case definition parsed')
             return final_config
         else:
-            logger.debug(f'{self.c} Result configuration not found')
+            logger.debug(f'{self.c} Case definition not found')
 
-    def parse_analyze_error_config(self):
-        """Get analyze error configuration.
+    def parse_analyze_error_definition(self):
+        """Get analyze error definition.
 
         Returns
         -------
         config : list or None
             List with dictionaries where presented all keys for discrapancies.
         """
-        logger.debug(f'{self.c} Parsing error configuration...')
-        string = self.control.config['error_config']
+        logger.debug(f'{self.c} Parsing error definition...')
+        string = self.control.config['error_definition']
         if utils.is_json(string):
             config = self._parse_json_filter(string)
-            logger.debug(f'{self.c} Error configuration parsed')
+            logger.debug(f'{self.c} Error definition parsed')
             return config
         else:
-            logger.debug(f'{self.c} Error configuration not found')
+            logger.debug(f'{self.c} Error definition not found')
 
     def parse_analyze_error_sql(self):
         """Prepare analyze error SQL expression.
@@ -1404,11 +1634,11 @@ class Parser():
             String with SQL expression to select discrapancies.
         """
         logger.debug(f'{self.c} Parsing error SQL...')
-        string = self.control.config['error_config']
+        string = self.control.config['error_definition']
         if utils.is_json(string):
             table = self.control.input_table
             expressions = []
-            config = self.parse_analyze_error_config()
+            config = self.parse_analyze_error_definition()
             for i in config:
                 expression = []
                 connexion = i['connexion']
@@ -1445,7 +1675,70 @@ class Parser():
             return ''
 
     def parse_reconciliation_rule_config(self):
-        """Get control rule configuration.
+        """Get reconciliation rule configuration.
+
+        Returns
+        -------
+        config : dict
+            Dictionary with reconciliation parameters.
+        """
+        logger.debug(f'{self.c} Parsing rule configuration...')
+        string = self.control.config['rule_config']
+        input_config = json.loads(string or '{}')
+        output_config = {}
+        need_recons_a = input_config.get('need_recons_a', False)
+        need_recons_b = input_config.get('need_recons_b', False)
+        need_issues_a = input_config.get('need_issues_a', False)
+        need_issues_b = input_config.get('need_issues_b', False)
+        allow_duplicates = input_config.get('allow_duplicates', False)
+        time_shift_from = input_config.get('time_shift_from', 0)
+        time_shift_to = input_config.get('time_shift_to', 0)
+        time_tolerance_from = input_config.get('time_tolerance_from', 0)
+        time_tolerance_to = input_config.get('time_tolerance_to', 0)
+        correlation_config = []
+        for item_config in input_config.get('correlation_config', {}):
+            field_a = item_config['field_a'].lower()
+            field_b = item_config['field_b'].lower()
+            allow_null = item_config.get('allow_null', False)
+            add_config = {
+                'field_a': field_a,
+                'field_b': field_b,
+                'allow_null': allow_null
+            }
+            correlation_config.append(add_config)
+        discrepancy_config = []
+        for item_config in input_config.get('discrepancy_config', {}):
+            field_a = item_config['field_a'].lower()
+            field_b = item_config['field_b'].lower()
+            numeric_tolerance_from = item_config.get('numeric_tolerance_from')
+            numeric_tolerance_to = item_config.get('numeric_tolerance_to')
+            percentage_mode = item_config.get('percentage_mode', False)
+            add_config = {
+                'field_a': field_a,
+                'field_b': field_b,
+                'numeric_tolerance_from': numeric_tolerance_from or 0,
+                'numeric_tolerance_to': numeric_tolerance_to or 0,
+                'percentage_mode': percentage_mode
+            }
+            discrepancy_config.append(add_config)
+        output_config = {
+            'need_recons_a': need_recons_a,
+            'need_recons_b': need_recons_b,
+            'need_issues_a': need_issues_a,
+            'need_issues_b': need_issues_b,
+            'allow_duplicates': allow_duplicates,
+            'time_shift_from': time_shift_from,
+            'time_shift_to': time_shift_to,
+            'time_tolerance_from': time_tolerance_from,
+            'time_tolerance_to': time_tolerance_to,
+            'correlation_config': correlation_config,
+            'discrepancy_config': discrepancy_config
+        }
+        logger.debug(f'{self.c} Rule configuration parsed')
+        return output_config
+
+    def parse_comparison_rule_config(self):
+        """Get comparison rule configuration.
 
         Returns
         -------
@@ -1464,16 +1757,16 @@ class Parser():
         logger.debug(f'{self.c} Rule configuration parsed')
         return config
 
-    def parse_reconciliation_error_config(self):
-        """Get reconciliation error configuration.
+    def parse_comparison_error_definition(self):
+        """Get comparison error definition.
 
         Returns
         -------
         config : list
             List with dictionaries where presented all keys for mismatching.
         """
-        logger.debug(f'{self.c} Parsing error configuration...')
-        raw = self.control.config['error_config']
+        logger.debug(f'{self.c} Parsing error definition...')
+        raw = self.control.config['error_definition']
         config = []
         for item in json.loads(raw or '[]'):
             column_a = item['column_a'].lower()
@@ -1481,7 +1774,7 @@ class Parser():
 
             new = {'column_a': column_a, 'column_b': column_b}
             config.append(new)
-        logger.debug(f'{self.c} Error configuration parsed')
+        logger.debug(f'{self.c} Error definition parsed')
         return config
 
     def _parse_json_filter(self, string):
@@ -1516,7 +1809,7 @@ class Parser():
         columns : list or None
             List with dictionaries where output columns configuration is
             presented.
-            Will be None if configuration is not filled in RAPO_CONFIG.
+            Will be None if parameter is not filled in configuration table.
         """
         config = self.control.config['output_table']
         columns = self._parse_output_columns(config)
@@ -1530,7 +1823,7 @@ class Parser():
         columns : list or None
             List with dictionaries where output A columns configuration is
             presented.
-            Will be None if configuration is not filled in RAPO_CONFIG.
+            Will be None if parameter is not filled in configuration table.
         """
         config = self.control.config['output_table_a']
         columns = self._parse_output_columns(config)
@@ -1544,7 +1837,7 @@ class Parser():
         columns : list or None
             List with dictionaries where output B columns configuration is
             presented.
-            Will be None if configuration is not filled in RAPO_CONFIG.
+            Will be None if parameter is not filled in configuration table.
         """
         config = self.control.config['output_table_b']
         columns = self._parse_output_columns(config)
@@ -1553,9 +1846,9 @@ class Parser():
     def _parse_output_columns(self, config):
         logger.debug(f'{self.c} Parsing output columns...')
         config = json.loads(config) if isinstance(config, str) else None
-        if config is None:
+        if not config:
             logger.debug(f'{self.c} Output was not configured')
-            return None
+            return []
         else:
             column = dict.fromkeys(['column', 'column_a', 'column_b'])
             columns = []
@@ -1574,17 +1867,18 @@ class Parser():
                 return columns
             else:
                 logger.debug(f'{self.c} Output columns was not configured')
-                return None
+                return columns
 
     def parse_mandatory_columns(self):
         """Get control mandatory columns."""
         logger.debug(f'{self.c} Parsing mandatory columns...')
+        columns = []
         if self.control.is_analysis:
             columns = [RESULT_KEY, RESULT_VALUE, RESULT_TYPE]
-            logger.debug(f'{self.c} Mandatory columns parsed')
-            return columns
-        else:
-            logger.debug(f'{self.c} Mandatory columns not defined')
+        elif self.control.is_reconciliation:
+            columns = [RESULT_TYPE, DISCREPANCY_ID, DISCREPANCY_DESCRIPTION]
+        logger.debug(f'{self.c} Mandatory columns parsed')
+        return columns
 
     def parse_result_columns(self):
         """Get result columns based on result statement and case configuration.
@@ -1595,7 +1889,7 @@ class Parser():
             Object representing result column.
         """
         logger.debug(f'{self.c} Parsing result columns...')
-        custom_statement = self.control.config['result_config']
+        custom_statement = self.control.config['case_definition']
         if self.control.is_analysis and custom_statement:
             columns = []
             case_config = self.parse_case_config()
@@ -1620,9 +1914,9 @@ class Parser():
                 field_name = f'rapo_result_{field}'
                 final_statement = custom_statement
                 for replace in replaces:
-                    old = replace[0]
-                    new = replace[1][field]
-                    final_statement = final_statement.replace(old, new)
+                    old = replace[0]+r'\s'
+                    new = replace[1][field]+r'\n'
+                    final_statement = re.sub(old, new, final_statement)
                 final_statement = db.formatter(final_statement)
                 column = sa.literal_column(final_statement).label(field_name)
                 columns.append(column)
@@ -1644,11 +1938,50 @@ class Parser():
 
         Returns
         -------
-        columns : sqlalchemy column
+        column : sqlalchemy column
             Object representing process identification column.
         """
         column = sa.literal(self.control.process_id).label('rapo_process_id')
         return column
+
+    def parse_iteration_config(self):
+        """Get appropriate period parameters for this control iteration."""
+        input_string = self.control.config['iteration_config'] or '[]'
+        input_config = json.loads(input_string)
+        output_config = []
+        for item_config in input_config:
+            iteration_id = item_config['iteration_id']
+            iteration_description = item_config.get('iteration_description')
+            period_back = item_config['period_back']
+            period_number = item_config['period_number']
+            period_type = item_config['period_type']
+            status = True if item_config['status'] == 'Y' else False
+
+            add_config = {
+                'iteration_id': iteration_id,
+                'iteration_description': iteration_description,
+                'period_back': period_back,
+                'period_number': period_number,
+                'period_type': period_type,
+                'status': status
+            }
+            output_config.append(add_config)
+        return output_config
+
+    def parse_parallelism_hint(self):
+        """Get SQL expression with parallelism hint.
+
+        Returns
+        -------
+        expression : string
+            String with SQL expression with parallelism hint.
+        """
+        degree_of_parallelism = self.control.parallelism
+        if degree_of_parallelism:
+            expression = f'/*+ parallel({degree_of_parallelism}) */'
+        else:
+            expression = ''
+        return expression
 
     def parse_variables(self):
         """Get control variables.
@@ -1718,8 +2051,8 @@ class Executor():
         """
         select = self.control.select
         if self.control.engine == 'DB':
-            tablename = f'rapo_temp_fd_{self.control.process_id}'
-            table = self._fetch_records_to_table(select, tablename)
+            table_name = f'rapo_temp_fd_{self.control.process_id}'
+            table = self._fetch_records_to_table(select, table_name)
             return table
 
     def fetch_records_a(self):
@@ -1733,8 +2066,8 @@ class Executor():
         """
         select = self.control.select_a
         if self.control.engine == 'DB':
-            tablename = f'rapo_temp_fda_{self.control.process_id}'
-            table = self._fetch_records_to_table(select, tablename)
+            table_name = f'rapo_temp_fda_{self.control.process_id}'
+            table = self._fetch_records_to_table(select, table_name)
             return table
 
     def fetch_records_b(self):
@@ -1748,12 +2081,26 @@ class Executor():
         """
         select = self.control.select_b
         if self.control.engine == 'DB':
-            tablename = f'rapo_temp_fdb_{self.control.process_id}'
-            table = self._fetch_records_to_table(select, tablename)
+            table_name = f'rapo_temp_fdb_{self.control.process_id}'
+            table = self._fetch_records_to_table(select, table_name)
             return table
 
+    def index_records_a(self):
+        """Create indexes for data from source A."""
+        if self.control.engine == 'DB':
+            table_name = f'rapo_temp_fda_{self.control.process_id}'
+            key_field_name = self.control.source_key_field_a
+            self._index_table(table_name, key_field_name)
+
+    def index_records_b(self):
+        """Create indexes for data from source B."""
+        if self.control.engine == 'DB':
+            table_name = f'rapo_temp_fdb_{self.control.process_id}'
+            key_field_name = self.control.source_key_field_b
+            self._index_table(table_name, key_field_name)
+
     def analyze(self):
-        """Run data analyze used for control with ANL type.
+        """Run data analysis control.
 
         Returns
         -------
@@ -1779,22 +2126,371 @@ class Executor():
                 columns.append(column)
             select = sa.select(columns)
 
-        tablename = f'rapo_temp_err_{self.control.process_id}'
+        table_name = f'rapo_temp_err_{self.control.process_id}'
         clause = sa.text(self.control.error_sql)
         select = select.where(clause)
         select = db.compile(select)
-        ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
+        ctas = sa.text(f'CREATE TABLE {table_name} AS\n{select}')
         text = db.formatter.document(ctas)
-        logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
+        logger.info(f'{self.c} Creating {table_name} with query:\n{text}')
         db.execute(ctas)
-        logger.debug(f'{self.c} {tablename} created')
+        logger.debug(f'{self.c} {table_name} created')
 
-        table = db.table(tablename)
+        table = db.table(table_name)
         logger.debug(f'{self.c} Analyzing done')
         return table
 
+    def reconsolidate(self):
+        """Run data reconciliation control.
+
+        Returns
+        -------
+        tables : list of sqlalchemy.Table
+            List of objects reflecting tables with found issues.
+        """
+
+        SQL_DIRECTORY = 'algorithms/rec/db'
+
+        create_comb = utils.read_sql(f'{SQL_DIRECTORY}/create_comb_table')
+        create_dup_a = utils.read_sql(f'{SQL_DIRECTORY}/create_dup_a_table')
+        create_dup_b = utils.read_sql(f'{SQL_DIRECTORY}/create_dup_b_table')
+        create_dup = utils.read_sql(f'{SQL_DIRECTORY}/create_dup_table')
+        create_nf_a = utils.read_sql(f'{SQL_DIRECTORY}/create_nf_a_table')
+        create_nf_b = utils.read_sql(f'{SQL_DIRECTORY}/create_nf_b_table')
+        save_err_a = utils.read_sql(f'{SQL_DIRECTORY}/save_err_a_table')
+        save_err_b = utils.read_sql(f'{SQL_DIRECTORY}/save_err_b_table')
+        save_rec_a = utils.read_sql(f'{SQL_DIRECTORY}/save_rec_a_table')
+        save_rec_b = utils.read_sql(f'{SQL_DIRECTORY}/save_rec_b_table')
+
+        # control_name = self.control.name
+        parallelism = self.control.parser.parse_parallelism_hint()
+        rule_config = self.control.rule_config
+
+        key_field_a = f'a.{self.control.source_key_field_a}'
+        date_field_a = f'a.{self.control.source_date_field_a}'
+
+        key_field_b = f'b.{self.control.source_key_field_b}'
+        date_field_b = f'b.{self.control.source_date_field_b}'
+
+        date_from = self.control.date_from
+        date_to = self.control.date_to
+        time_shift_from = rule_config['time_shift_from']
+        time_shift_to = rule_config['time_shift_to']
+        # time_tolerance_from = rule_config['time_tolerance_from']
+        # time_tolerance_to = rule_config['time_tolerance_to']
+
+        need_issues_a = rule_config['need_issues_a']
+        need_issues_b = rule_config['need_issues_b']
+        need_recons_a = rule_config['need_recons_a']
+        need_recons_b = rule_config['need_recons_b']
+        allow_duplicates = rule_config['allow_duplicates']
+
+        key_fields_a = []
+        key_fields_b = []
+        for case in rule_config['correlation_config']:
+            field_a = case['field_a'].lower()
+            key_fields_a.append(f'a.{field_a}')
+
+            field_b = case['field_b'].lower()
+            key_fields_b.append(f'b.{field_b}')
+
+        key_list = []
+        key_rules = []
+        for field_a, field_b in zip(key_fields_a, key_fields_b):
+            key_pair = f'coalesce({field_a}, {field_b})'
+            key_list.append(key_pair)
+            key_rule = f'{field_a} = {field_b}'
+            key_rules.append(key_rule)
+
+        keys_a = ', '.join(key_fields_a).lower()
+        keys_b = ', '.join(key_fields_b).lower()
+        key_rules = ' and '.join(key_rules).lower()
+        key_value = '||\'|\'||'.join(key_list).lower()
+        key_partition = ', '.join(key_list).lower()
+
+        discrepancy_fields_a = []
+        discrepancy_fields_b = []
+        discrepancy_tolerances = []
+        for case in rule_config['discrepancy_config']:
+            field_a = case['field_a'].lower()
+            discrepancy_fields_a.append(f'a.{field_a}')
+
+            field_b = case['field_b'].lower()
+            discrepancy_fields_b.append(f'b.{field_b}')
+
+            tolerance_from = case['numeric_tolerance_from']
+            tolerance_to = case['numeric_tolerance_to']
+            percentage_mode = case.get('percentage_mode', False)
+            discrepancy_tolerances.append([tolerance_from, tolerance_to,
+                                           percentage_mode])
+
+        numerics_a = (', '.join(discrepancy_fields_a)+','
+                      if discrepancy_fields_a else '')
+        numerics_b = (', '.join(discrepancy_fields_b)+','
+                      if discrepancy_fields_b else '')
+        numerics_number = len(discrepancy_tolerances)
+
+        discrepancy_rules = []
+        discrepancy_formulas = []
+        discrepancy_fields = []
+        discrepancy_sums = []
+        discrepancy_number = 0
+
+        discrepancy_rule_form = utils.read_sql(
+            f'{SQL_DIRECTORY}/exps/discrepancy_rule')
+        discrepancy_formula_form = utils.read_sql(
+            f'{SQL_DIRECTORY}/exps/discrepancy_formula')
+        discrepancy_field_form = utils.read_sql(
+            f'{SQL_DIRECTORY}/exps/discrepancy_field')
+        discrepancy_percentage_form = utils.read_sql(
+            f'{SQL_DIRECTORY}/exps/discrepancy_percentage')
+
+        for field_a, field_b, tolerance in zip(discrepancy_fields_a,
+                                               discrepancy_fields_b,
+                                               discrepancy_tolerances):
+            discrepancy_number += 1
+
+            tolerance_from = tolerance[0]
+            tolerance_to = tolerance[1]
+            percentage_mode = tolerance[2]
+            percentage_formula = discrepancy_percentage_form.format(
+                field_a=field_a,
+                field_b=field_b
+            ) if percentage_mode else ''
+
+            discrepancy_rule = discrepancy_rule_form.format(
+                field_a=field_a,
+                field_b=field_b,
+                field_name_a=field_a[2:].upper(),
+                field_name_b=field_b[2:].upper(),
+                tolerance_from=tolerance_from,
+                tolerance_to=tolerance_to,
+                percentage_formula=percentage_formula,
+                discrepancy_number=discrepancy_number
+            )
+            discrepancy_rules.append(discrepancy_rule)
+
+            discrepancy_formula = discrepancy_formula_form.format(
+                discrepancy_number=discrepancy_number
+            )
+            discrepancy_formulas.append(discrepancy_formula)
+
+            discrepancy_field = discrepancy_field_form.format(
+                discrepancy_number=discrepancy_number
+            )
+            discrepancy_fields.append(discrepancy_field)
+
+            discrepancy_sum = f'abs(discrepancy_{discrepancy_number}_value)'
+            discrepancy_sums.append(discrepancy_sum)
+
+        discrepancy_rules = ''.join(discrepancy_rules)
+        discrepancy_formulas = ''.join(discrepancy_formulas)
+        discrepancy_fields = ''.join(discrepancy_fields)
+        discrepancy_sums = '+'.join(discrepancy_sums) or 'null'
+
+        discrepancy_description_a_c = []
+        discrepancy_description_a_d = []
+        discrepancy_description_b_c = []
+        discrepancy_description_b_d = []
+        discrepancy_filter_a_c = []
+        discrepancy_filter_a_d = []
+        discrepancy_filter_b_c = []
+        discrepancy_filter_b_d = []
+        discrepancy_description_form = utils.read_sql(
+            f'{SQL_DIRECTORY}/exps/discrepancy_desc')
+        discrepancy_filter_form = utils.read_sql(
+            f'{SQL_DIRECTORY}/exps/discrepancy_filter')
+        discrepancy_pairs = [(datasource, alias)
+                             for datasource in ['a', 'b']
+                             for alias in ['c', 'd']]
+        for discrepancy_number in range(1, numerics_number+1):
+            for datasource, alias in discrepancy_pairs:
+                discrepancy_description = discrepancy_description_form.format(
+                    discrepancy_number=discrepancy_number,
+                    datasource=datasource,
+                    alias=alias
+                )
+                discrepancy_filter = discrepancy_filter_form.format(
+                    discrepancy_number=discrepancy_number,
+                    datasource=datasource,
+                    alias=alias
+                )
+                if datasource == 'a' and alias == 'c':
+                    discrepancy_description_a_c.append(discrepancy_description)
+                    discrepancy_filter_a_c.append(discrepancy_filter)
+                elif datasource == 'a' and alias == 'd':
+                    discrepancy_description_a_d.append(discrepancy_description)
+                    discrepancy_filter_a_d.append(discrepancy_filter)
+                elif datasource == 'b' and alias == 'c':
+                    discrepancy_description_b_c.append(discrepancy_description)
+                    discrepancy_filter_b_c.append(discrepancy_filter)
+                elif datasource == 'b' and alias == 'd':
+                    discrepancy_description_b_d.append(discrepancy_description)
+                    discrepancy_filter_b_d.append(discrepancy_filter)
+
+        discrepancy_description_a_c = ''.join(discrepancy_description_a_c)
+        discrepancy_description_a_d = ''.join(discrepancy_description_a_d)
+        discrepancy_description_b_c = ''.join(discrepancy_description_b_c)
+        discrepancy_description_b_d = ''.join(discrepancy_description_b_d)
+
+        discrepancy_filter_a_c = ''.join(discrepancy_filter_a_c)
+        discrepancy_filter_a_d = ''.join(discrepancy_filter_a_d)
+        discrepancy_filter_b_c = ''.join(discrepancy_filter_b_c)
+        discrepancy_filter_b_d = ''.join(discrepancy_filter_b_d)
+
+        target_err_types_a = ['Loss', 'Discrepancy']
+        if not allow_duplicates:
+            target_err_types_a.append('Duplicate')
+
+        target_err_types_b = ['Loss', 'Discrepancy']
+        if not allow_duplicates:
+            target_err_types_b.append('Duplicate')
+
+        target_err_types_a = [f'\'{value}\'' for value in target_err_types_a]
+        target_err_types_a = ', '.join(target_err_types_a)
+
+        target_err_types_b = [f'\'{value}\'' for value in target_err_types_b]
+        target_err_types_b = ', '.join(target_err_types_b)
+
+        create_comb = create_comb.format(
+            process_id=self.control.process_id,
+            parallelism=parallelism,
+            key_field_a=key_field_a,
+            key_field_b=key_field_b,
+            key_rules=key_rules,
+            key_value=key_value,
+            key_partition=key_partition,
+            date_field_a=date_field_a,
+            date_field_b=date_field_b,
+            date_field_name_a=date_field_a[2:].upper(),
+            date_field_name_b=date_field_b[2:].upper(),
+            time_shift_from=time_shift_from,
+            time_shift_to=time_shift_to,
+            discrepancy_rules=discrepancy_rules,
+            discrepancy_fields=discrepancy_fields,
+            discrepancy_formulas=discrepancy_formulas,
+            discrepancy_sums=discrepancy_sums
+        )
+        create_dup_a = create_dup_a.format(
+            process_id=self.control.process_id,
+            parallelism=parallelism,
+            keys_a=keys_a,
+            key_field_a=key_field_a,
+            date_field_a=date_field_a,
+            discrepancy_fields_a=numerics_a
+        )
+        create_dup_b = create_dup_b.format(
+            process_id=self.control.process_id,
+            parallelism=parallelism,
+            keys_b=keys_b,
+            key_field_b=key_field_b,
+            date_field_b=date_field_b,
+            discrepancy_fields_b=numerics_b
+        )
+        create_dup = create_dup.format(
+            process_id=self.control.process_id,
+            parallelism=parallelism,
+            key_field_a=key_field_a,
+            key_field_b=key_field_b,
+            key_rules=key_rules,
+            date_field_a=date_field_a,
+            date_field_b=date_field_b,
+            time_shift_from=time_shift_from,
+            time_shift_to=time_shift_to
+        )
+        create_nf_a = create_nf_a.format(
+            process_id=self.control.process_id,
+            parallelism=parallelism,
+            key_field_a=key_field_a,
+            date_field_a=date_field_a,
+            date_from=date_from,
+            date_to=date_to
+        )
+        create_nf_b = create_nf_b.format(
+            process_id=self.control.process_id,
+            parallelism=parallelism,
+            key_field_b=key_field_b,
+            date_field_b=date_field_b,
+            date_from=date_from,
+            date_to=date_to
+        )
+        save_err_a = save_err_a.format(
+            process_id=self.control.process_id,
+            parallelism=parallelism,
+            key_field_a=key_field_a,
+            date_field_a=date_field_a,
+            date_from=date_from,
+            date_to=date_to,
+            discrepancy_description_a_c=discrepancy_description_a_c,
+            discrepancy_filter_a_c=discrepancy_filter_a_c,
+            discrepancy_description_a_d=discrepancy_description_a_d,
+            discrepancy_filter_a_d=discrepancy_filter_a_d,
+            target_err_types_a=target_err_types_a
+        )
+        save_err_b = save_err_b.format(
+            process_id=self.control.process_id,
+            parallelism=parallelism,
+            key_field_b=key_field_b,
+            date_field_b=date_field_b,
+            date_from=date_from,
+            date_to=date_to,
+            discrepancy_description_b_c=discrepancy_description_b_c,
+            discrepancy_filter_b_c=discrepancy_filter_b_c,
+            discrepancy_description_b_d=discrepancy_description_b_d,
+            discrepancy_filter_b_d=discrepancy_filter_b_d,
+            target_err_types_b=target_err_types_b
+        )
+        save_rec_a = save_rec_a.format(
+            process_id=self.control.process_id,
+            parallelism=parallelism,
+            key_field_a=key_field_a,
+            key_field_name_a=key_field_a[2:]
+        )
+        save_rec_b = save_rec_b.format(
+            process_id=self.control.process_id,
+            parallelism=parallelism,
+            key_field_b=key_field_b,
+            key_field_name_b=key_field_b[2:]
+        )
+
+        combination_stage_scripts = create_comb
+        duplication_stage_prepare_a_scripts = [create_dup_a]
+        duplication_stage_prepare_b_scripts = [create_dup_b]
+        duplication_stage_finish_scripts = create_dup
+        definition_stage_a_scripts = []
+        if self.control.need_a:
+            definition_stage_a_scripts.append(create_nf_a)
+            if need_issues_a:
+                definition_stage_a_scripts.append(save_err_a)
+            elif need_recons_a:
+                definition_stage_a_scripts.extend([save_err_a, save_rec_a])
+        definition_stage_b_scripts = []
+        if self.control.need_b:
+            definition_stage_b_scripts.append(create_nf_b)
+            if need_issues_b:
+                definition_stage_b_scripts.append(save_err_b)
+            elif need_recons_b:
+                definition_stage_b_scripts.extend([save_err_b, save_rec_b])
+
+        db.execute(combination_stage_scripts, output=logger.info,
+                   tag=self.control)
+
+        line_a = {'name': 'prepare_duplicates_a',
+                  'statements': duplication_stage_prepare_a_scripts}
+        line_b = {'name': 'prepare_duplicates_b',
+                  'statements': duplication_stage_prepare_b_scripts}
+        db.parallelize(line_a, line_b, output=logger.info, tag=self.control)
+        db.execute(duplication_stage_finish_scripts, output=logger.info,
+                   tag=self.control)
+
+        line_a = {'name': 'reconsolidate_a',
+                  'statements': definition_stage_a_scripts}
+        line_b = {'name': 'reconsolidate_b',
+                  'statements': definition_stage_b_scripts}
+        db.parallelize(line_a, line_b, output=logger.info, tag=self.control)
+
     def match(self):
-        """Run data matching for control with REC type and MA subtype.
+        """Run data matching for comparison control.
 
         Returns
         -------
@@ -1841,25 +2537,25 @@ class Executor():
         select = sa.select(columns).select_from(join)
 
         keys = []
-        for error in self.control.error_config:
+        for error in self.control.error_definition:
             column_a = table_a.c[error['column_a']]
             column_b = table_b.c[error['column_b']]
             select = select.where(column_a == column_b)
 
-        tablename = f'rapo_temp_md_{self.control.process_id}'
+        table_name = f'rapo_temp_md_{self.control.process_id}'
         select = db.compile(select)
-        ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
+        ctas = sa.text(f'CREATE TABLE {table_name} AS\n{select}')
         text = db.formatter.document(ctas)
-        logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
+        logger.info(f'{self.c} Creating {table_name} with query:\n{text}')
         db.execute(ctas)
-        logger.debug(f'{self.c} {tablename} created')
+        logger.debug(f'{self.c} {table_name} created')
 
-        table = db.table(tablename)
+        table = db.table(table_name)
         logger.debug(f'{self.c} Matches defined')
         return table
 
     def mismatch(self):
-        """Run data mismatching for control with REC type and MA subtype.
+        """Run data mismatching for comparison control.
 
         Returns
         -------
@@ -1905,23 +2601,23 @@ class Executor():
                 keys = (column_a == column_b)
             else:
                 keys &= (column_a == column_b)
-        join = table_a.outerjoin(table_b, keys)
+        join = table_a.join(table_b, keys)
         select = sa.select(columns).select_from(join)
 
-        for error in self.control.error_config:
+        for error in self.control.error_definition:
             column_a = table_a.c[error['column_a']]
             column_b = table_b.c[error['column_b']]
-            select = select.where((column_a != column_b) | (column_b == None) )
+            select = select.where(column_a != column_b)
 
-        tablename = f'rapo_temp_nmd_{self.control.process_id}'
+        table_name = f'rapo_temp_nmd_{self.control.process_id}'
         select = db.compile(select)
-        ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
+        ctas = sa.text(f'CREATE TABLE {table_name} AS\n{select}')
         text = db.formatter.document(ctas)
-        logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
+        logger.info(f'{self.c} Creating {table_name} with query:\n{text}')
         db.execute(ctas)
-        logger.debug(f'{self.c} {tablename} created')
+        logger.debug(f'{self.c} {table_name} created')
 
-        table = db.table(tablename)
+        table = db.table(table_name)
         logger.debug(f'{self.c} Mismatches defined')
         return table
 
@@ -1947,20 +2643,65 @@ class Executor():
         return fetched_b
 
     def count_errors(self):
-        """Count found discrepancies for control with ANL type.
+        """Count found errors in control.
 
         Returns
         -------
         errors : int
-            Number of found discrepancies.
+            Number of found errors in control.
         """
-        logger.debug(f'{self.c} Counting errors...')
+        if self.control.error_table is not None:
+            return self._count_errors(self.control.error_table)
+
+    def count_errors_a(self):
+        """Count found errors in control for side A.
+
+        Returns
+        -------
+        error_number : list of int
+            Number of found errors in control from side A.
+        """
+        if self.control.need_a and self.control.error_table_a is not None:
+            return self._count_errors(self.control.error_table_a)
+
+    def count_errors_b(self):
+        """Count found errors in control for side B.
+
+        Returns
+        -------
+        error_number : list of int
+            Number of found errors in control from side B.
+        """
+        if self.control.need_b and self.control.error_table_b is not None:
+            return self._count_errors(self.control.error_table_b)
+
+    def _count_errors(self, table):
+        logger.debug(f'{self.c} Counting errors from {table.name}...')
+        error_number = None
         if self.control.engine == 'DB':
-            table = self.control.error_table
             count = sa.select([sa.func.count()]).select_from(table)
-            errors = db.execute(count).scalar()
-        logger.debug(f'{self.c} Errors counted')
-        return errors
+            error_number = db.execute(count).scalar()
+        logger.debug(f'{self.c} Errors from {table.name} counted')
+        return error_number
+
+    def count_results_a(self):
+        """Count found results in control for side A."""
+        if self.control.need_a and self.control.result_table_a:
+            return self._count_results(self.control.result_table_a)
+
+    def count_results_b(self):
+        """Count found results in control for side B."""
+        if self.control.need_b and self.control.result_table_b:
+            return self._count_results(self.control.result_table_b)
+
+    def _count_results(self, table):
+        logger.debug(f'{self.c} Counting results from {table.name}...')
+        result_number = None
+        if self.control.engine == 'DB':
+            count = sa.select([sa.func.count()]).select_from(table)
+            result_number = db.execute(count).scalar()
+        logger.debug(f'{self.c} Results from {table.name} counted')
+        return result_number
 
     def count_matched(self):
         """Count records that were matched.
@@ -2024,6 +2765,150 @@ class Executor():
         """Save found mismatches as RAPO results."""
         return self.save_errors()
 
+    def save_reconciliation_output_a(self):
+        """Save reconciliation results from side A as output records."""
+        logger.debug(f'{self.c} Start saving reconciliation output A...')
+        rule_config = self.control.rule_config
+        need_issues_a = rule_config['need_issues_a']
+        need_recons_a = rule_config['need_recons_a']
+        output_table = self.prepare_output_table_a()
+        output_columns = output_table.columns
+        process_id = self.control.key_column
+        input_tables = []
+        if need_issues_a:
+            error_table = self.control.error_table_a
+            input_tables.append(error_table)
+        if need_recons_a:
+            result_table = self.control.result_table_a
+            input_tables.append(result_table)
+        for input_table in input_tables:
+            select = sa.select([*input_table.columns, process_id])
+            insert = output_table.insert().from_select(output_columns, select)
+            db.execute(insert)
+        logger.debug(f'{self.c} Reconciliation output A saved')
+
+    def save_reconciliation_output_b(self):
+        """Save reconciliation results from side B as output records."""
+        logger.debug(f'{self.c} Start saving reconciliation output B...')
+        rule_config = self.control.rule_config
+        need_issues_b = rule_config['need_issues_b']
+        need_recons_b = rule_config['need_recons_b']
+        output_table = self.prepare_output_table_b()
+        output_columns = output_table.columns
+        process_id = self.control.key_column
+        input_tables = []
+        if need_issues_b:
+            error_table = self.control.error_table_b
+            input_tables.append(error_table)
+        if need_recons_b:
+            result_table = self.control.result_table_b
+            input_tables.append(result_table)
+        for input_table in input_tables:
+            select = sa.select([*input_table.columns, process_id])
+            insert = output_table.insert().from_select(output_columns, select)
+            db.execute(insert)
+        logger.debug(f'{self.c} Reconciliation output B saved')
+
+    def prepare_output_table(self):
+        """Check result table and create it if initial control run.
+
+        Returns
+        -------
+        table : sqlalchemy.Table
+            Object reflecting result table.
+        """
+        table_name = f'rapo_rest_{self.control.name}'.lower()
+        return self._prepare_output_table(table_name)
+
+    def prepare_output_table_a(self):
+        """Prepare output table A."""
+        table_name = f'rapo_resa_{self.control.name}'.lower()
+        return self._prepare_output_table(table_name)
+
+    def prepare_output_table_b(self):
+        """Prepare output table B."""
+        table_name = f'rapo_resb_{self.control.name}'.lower()
+        return self._prepare_output_table(table_name)
+
+    def _prepare_output_table(self, table_name):
+        if self.control.with_deletion or self.control.with_drop:
+            if db.engine.has_table(table_name):
+                if self.control.with_deletion:
+                    db.truncate(table_name)
+                elif self.control.with_drop:
+                    db.drop(table_name)
+        if not db.engine.has_table(table_name):
+            logger.debug(f'{self.c} Table {table_name} will be created')
+
+            columns = self._prepare_output_columns(table_name)
+            select = sa.select(columns)
+            select = select.where(sa.literal(1) == sa.literal(0))
+            select = db.compile(select)
+            ctas = f'CREATE TABLE {table_name} AS\n{select}'
+            index = (f'CREATE INDEX {table_name}_rapo_process_id_ix '
+                     f'ON {table_name}(rapo_process_id) COMPRESS')
+            compress = (f'ALTER TABLE {table_name} '
+                        'MOVE ROW STORE COMPRESS ADVANCED')
+            text = db.formatter.document(ctas, index, compress)
+            logger.debug(f'{self.c} Creating table {table_name} '
+                         f'with query:\n{text}')
+            db.execute(ctas)
+            db.execute(index)
+            db.execute(compress)
+            logger.debug(f'{self.c} {table_name} created')
+        table = db.table(table_name)
+        return table
+
+    def _prepare_output_columns(self, table_name):
+        output_columns = []
+        chosen_columns = []
+        if (
+            self.control.is_analysis
+            or self.control.is_comparison
+            or self.control.is_report
+        ):
+            chosen_columns.extend(self.control.output_columns)
+            if not chosen_columns:
+                output_columns.extend(self.c.source_table.columns)
+        elif self.control.is_reconciliation:
+            if table_name.startswith('rapo_resa'):
+                chosen_columns.extend(self.control.output_columns_a)
+                if not chosen_columns:
+                    output_columns.extend(self.control.source_table_a.columns)
+            elif table_name.startswith('rapo_resb'):
+                chosen_columns.extend(self.control.output_columns_b)
+                if not chosen_columns:
+                    output_columns.extend(self.control.source_table_b.columns)
+        mandatory_columns = self.control.mandatory_columns
+        process_id = self.control.key_column
+
+        for chosen_column in chosen_columns:
+            column_a = chosen_column['column_a']
+            column_b = chosen_column['column_b']
+            column_name = chosen_column['column']
+            if column_a or column_b:
+                table_a = self.control.source_table_a
+                table_b = self.control.source_table_b
+                if column_a and column_b:
+                    column_a = table_a.c[column_a]
+                    column_b = table_b.c[column_b]
+                    column = sa.func.coalesce(column_a, column_b)
+                elif column_a:
+                    column = table_a.c[column_a]
+                elif column_b:
+                    column = table_b.c[column_b]
+                column = column.label(column_name) if column_name else column
+            else:
+                table = self.control.source_table
+                column = table.c[column_name]
+            output_columns.append(column)
+        for mandatory_column in mandatory_columns:
+            column = mandatory_column.null
+            output_columns.append(column)
+        output_columns.append(process_id)
+
+        return output_columns
+
     def delete_output_records(self):
         """Delete records saved as control results in DB table."""
         for table in self.control.output_tables:
@@ -2034,85 +2919,11 @@ class Executor():
                 delete = table.delete().where(id == self.control.process_id)
                 db.execute(delete)
 
-    def prepare_output_table(self):
-        """Check RAPO_RESULT and create it at initial control run.
-
-        Returns
-        -------
-        table : sqlalchemy.Table
-            Object reflecting RAPO_RESULT.
-        """
-        tablename = f'rapo_rest_{self.control.name}'.lower()
-        if self.control.with_deletion or self.control.with_drop:
-            if db.engine.has_table(tablename):
-                if self.control.with_deletion:
-                    db.truncate(tablename)
-                elif self.control.with_drop:
-                    db.drop(tablename)
-        if not db.engine.has_table(tablename):
-            logger.debug(f'{self.c} Table {tablename} will be created')
-
-            columns = []
-            output_columns = self.control.output_columns
-            mandatory_columns = self.control.mandatory_columns
-            if not output_columns or len(output_columns) == 0:
-                if self.c.config['source_name'] is not None:
-                    columns.extend(self.c.source_table.columns)
-                if self.c.config['source_name_a'] is not None:
-                    columns.extend(self.c.source_table_a.columns)
-                if self.c.config['source_name_b'] is not None:
-                    columns.extend(self.c.source_table_b.columns)
-            else:
-                for output_column in output_columns:
-                    name = output_column['column']
-                    column_a = output_column['column_a']
-                    column_b = output_column['column_b']
-                    if column_a is not None or column_b is not None:
-                        table_a = self.control.source_table_a
-                        table_b = self.control.source_table_b
-                        if column_a is not None and column_b is not None:
-                            column_a = table_a.c[column_a]
-                            column_b = table_b.c[column_b]
-                            column = sa.func.coalesce(column_a, column_b)
-                        elif column_a is not None:
-                            column = table_a.c[column_a]
-                        elif column_b is not None:
-                            column = table_b.c[column_b]
-                        column = column.label(name) if name else column
-                    else:
-                        table = self.control.source_table
-                        column = table.c[name]
-                    columns.append(column)
-            if mandatory_columns:
-                for mandatory_column in mandatory_columns:
-                    column = mandatory_column.null
-                    columns.append(column)
-
-            process_id = self.control.key_column
-            columns = [*columns, process_id]
-            select = sa.select(columns)
-            select = select.where(sa.literal(1) == sa.literal(0))
-            select = db.compile(select)
-            ctas = f'CREATE TABLE {tablename} AS\n{select}'
-            index = (f'CREATE INDEX {tablename}_rapo_process_id_ix '
-                     f'ON {tablename}(rapo_process_id) COMPRESS')
-            compress = (f'ALTER TABLE {tablename} '
-                        'MOVE ROW STORE COMPRESS ADVANCED')
-            text = db.formatter.document(ctas, index, compress)
-            logger.debug(f'{self.c} Creating table {tablename} '
-                         f'with query:\n{text}')
-            db.execute(ctas)
-            db.execute(index)
-            db.execute(compress)
-            logger.debug(f'{self.c} {tablename} created')
-        table = db.table(tablename)
-        return table
-
     def drop_temporary_tables(self):
         """Clean all temporary tables created during control execution."""
         logger.debug(f'{self.c} Dropping temporary tables...')
         for table in self.control.temp_tables:
-            table.drop(db.engine)
+            db.purge(table.name)
         logger.debug(f'{self.c} Temporary tables dropped')
 
     def prerun_hook(self):
@@ -2142,15 +2953,19 @@ class Executor():
         db.execute(stmt)
         logger.debug(f'{self.c} Hook procedure executed')
 
-    def _fetch_records_to_table(self, select, tablename):
+    def _fetch_records_to_table(self, select, table_name):
         logger.debug(f'{self.c} Start fetching...')
+        parallelism = self.control.config['parallelism']
+        if parallelism:
+            hint = f'parallel({parallelism})'
+            select = select.with_hint(sa.text(table_name), hint)
         select = db.compile(select)
-        ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
+        ctas = sa.text(f'CREATE TABLE {table_name} AS\n{select}')
         text = db.formatter.document(ctas)
-        logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
+        logger.info(f'{self.c} Creating {table_name} with query:\n{text}')
         db.execute(ctas)
-        logger.info(f'{self.c} {tablename} created')
-        table = db.table(tablename)
+        logger.info(f'{self.c} {table_name} created')
+        table = db.table(table_name)
         logger.debug(f'{self.c} Fetching done')
         return table
 
@@ -2160,3 +2975,16 @@ class Executor():
         fetched = db.execute(count).scalar()
         logger.debug(f'{self.c} Fetched in {table} counted')
         return fetched
+
+    def _index_table(self, table_name, key_field_name):
+        logger.debug(f'{self.c} Creating index for {table_name}...')
+        index_name = f'{table_name}_ix'
+        parallelism = self.control.config['parallelism'] or 1
+        create_index = (f'create index {index_name} '
+                        f'on {table_name} ({key_field_name}) unusable')
+        rebuild_index = (f'alter index {index_name} rebuild online '
+                         f'parallel {parallelism} '
+                         'nologging')
+        db.execute(create_index)
+        db.execute(rebuild_index)
+        logger.debug(f'{self.c} Index for {table_name} created')

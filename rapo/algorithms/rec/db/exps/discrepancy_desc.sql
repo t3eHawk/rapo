@@ -1,0 +1,1 @@
+|| case when {alias}.discrepancy_{discrepancy_number}_{datasource} is not null then {alias}.discrepancy_{discrepancy_number}_{datasource}||'['||{alias}.discrepancy_{discrepancy_number}_value||']' end

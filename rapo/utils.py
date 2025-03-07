@@ -142,4 +142,22 @@ class Utils():
         return calculated_date
 
     def read_sql(self, module_relative_path):
+        """Read the specified SQL file by its path.
+
+        Parameters
+        ----------
+        module_relative_path : str
+        Relative path to the SQL file from the directory,
+
+        Returns
+        -------
+        text : bool
+            Result of the check.
+        """
+        module_directory = os.path.dirname(__file__)
+        file_path = f'{module_directory}/{module_relative_path}.sql'
+        text = open(file_path, 'r', encoding='utf-8').read()
+        return text
+
+
 utils = Utils()

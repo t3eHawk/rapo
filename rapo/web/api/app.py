@@ -7,15 +7,15 @@ import flask
 from .auth import auth
 from .response import OK
 
+from ...logger import logger
 from ...reader import reader
 
 from ...main.control import Control
 
-from datetime import datetime
 
 app = flask.Flask(__name__)
-
 app.static_folder = 'ui'
+logger.configure(console=False)
 
 
 @app.route('/')

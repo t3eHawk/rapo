@@ -403,6 +403,14 @@ class Control():
             raise ValueError(message)
 
     @property
+    def duration(self):
+        """Get control duration."""
+        if self.end_date:
+            return (self.end_date-self.start_date).seconds
+        current_date = dt.datetime.now()
+        return (current_date-self.start_date).seconds
+
+    @property
     def initiated(self):
         """Check if control is initiated."""
         if self.status == 'I':
@@ -416,6 +424,14 @@ class Control():
         if self.status in ('S', 'P', 'F'):
             return True
         else:
+            return False
+
+    @property
+    def timeout(self):
+        """Check if control time limit is reached."""
+        time_limit = self.config['timeout']
+        if self.duration > time_limit:
+            return True
             return False
 
     @property
@@ -757,6 +773,11 @@ class Control():
             control = Control(process_id=self.process_id)
             if not control.status:
                 logger.info(f'{self} Control cancelation request received')
+                self.process = process
+                self._terminate()
+                self._cancel()
+            elif control.timeout:
+                logger.info(f'{self} Control cancelation with timeout ')
                 self.process = process
                 self._terminate()
                 self._cancel()

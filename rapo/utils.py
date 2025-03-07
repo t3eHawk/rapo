@@ -127,4 +127,19 @@ class Utils():
                 if item_config[key_name] == config_id:
                     return item_config
 
+    def get_month_date_from(self, initial_date):
+        """Get first month date from the given initial date."""
+        calculated_date = initial_date.replace(day=1, hour=0,
+                                               minute=0, second=0)
+        return calculated_date
+
+    def get_month_date_to(self, initial_date):
+        """Get last month date from the given initial date."""
+        month_range = cd.monthrange(initial_date.year, initial_date.month)
+        last_day = month_range[1]
+        calculated_date = initial_date.replace(day=last_day, hour=23,
+                                               minute=59, second=59)
+        return calculated_date
+
+    def read_sql(self, module_relative_path):
 utils = Utils()

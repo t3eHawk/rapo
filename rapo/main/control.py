@@ -161,7 +161,7 @@ class Control():
     """
 
     def __init__(self, name=None, timestamp=None, process_id=None,
-                 date=None, date_from=None, date_to=None):
+                 iteration_id=None, date=None, date_from=None, date_to=None):
         self.name = name or reader.read_control_name(process_id)
         self.config = reader.read_control_config(self.name)
         self.result = reader.read_control_result(process_id)
@@ -185,6 +185,8 @@ class Control():
             self.updated = self.result['updated']
             self.status = self.result['status']
 
+            self.iteration_id = None
+            self.timestamp = None
             self.date_from = self.result['date_from']
             self.date_to = self.result['date_to']
 
@@ -207,6 +209,19 @@ class Control():
             self.updated = None
             self.status = None
 
+            self.iteration_id = iteration_id
+            if self.iteration_id:
+                iteration_config = utils.get_config(self.iteration_id,
+                                                    self.iteration_config)
+                self.period_back = iteration_config['period_back']
+                self.period_number = iteration_config['period_number']
+                self.period_type = iteration_config['period_type']
+            else:
+                self.period_back = self.config['period_back']
+                self.period_number = self.config['period_number']
+                self.period_type = self.config['period_type']
+
+            self.timestamp = timestamp
             if self.timestamp:
                 self.date_from, self.date_to = self.parser.parse_dates()
             elif date:
@@ -456,7 +471,10 @@ class Control():
     @property
     def has_cases(self):
         """Identify whether control is case-configured or not."""
-        if self.config['result_config'] and self.config['case_config']:
+    @property
+    def has_iterations(self):
+        """Identify whether control is iteration-configured or not."""
+        if self.config['iteration_config']:
             return True
         return False
 
@@ -495,6 +513,11 @@ class Control():
         """Get control error SQL expression."""
         if self.type == 'ANL':
             return self.parser.parse_analyze_error_sql()
+
+    @property
+    def iteration_config(self):
+        """Get control iteration configuration."""
+        return self.parser.parse_iteration_config()
 
     @property
     def output_columns(self):
@@ -570,6 +593,19 @@ class Control():
         logger.debug(f'{self} Running control...')
         if self._initiate():
             self._spawn()
+
+    def iterate(self):
+        """Run all additional control iterations."""
+        for case in self.iteration_config:
+            iteration_id = case['iteration_id']
+            iteration_status = case['status']
+            if iteration_status:
+                logger.info(f'{self} Iterating control '
+                            f'using configuration {case}')
+                control = self.__class__(name=self.name,
+                                         timestamp=self.timestamp,
+                                         iteration_id=iteration_id)
+                control.run()
 
     def prerequisite(self):
         """Get the result of the prerequisite statement."""
@@ -1063,8 +1099,21 @@ class Parser():
             Fetched records from data source should begin from this date.
         """
         timestamp = self.control.timestamp
-        date = self._parse_date(timestamp, 0, 0, 0)
-        return date
+        period_back = self.control.period_back
+        period_type = self.control.period_type
+        current_date = self._parse_date(timestamp, 0, 0, 0)
+        if period_type == 'D':
+            target_date = current_date-dt.timedelta(days=period_back)
+        elif period_type == 'M':
+            calculated_date = utils.get_month_date_from(current_date)
+            while period_back:
+                calculated_date = calculated_date-dt.timedelta(days=1)
+                calculated_date = utils.get_month_date_from(calculated_date)
+                period_back -= 1
+            target_date = calculated_date.replace()
+        elif period_type == 'W':
+            target_date = current_date-dt.timedelta(weeks=period_back)
+        return target_date
 
     def parse_date_to(self):
         """Get data source date upper bound.
@@ -1072,9 +1121,22 @@ class Parser():
         date_to : datetime or None
             Fetched records from data source should end with this date.
         """
-        timestamp = self.control.timestamp
-        date = self._parse_date(timestamp, 23, 59, 59)
-        return date
+        period_number = self.control.period_number
+        period_type = self.control.period_type
+        current_date = self._parse_date(self.parse_date_from(), 23, 59, 59)
+        if period_type == 'D':
+            target_date = current_date+dt.timedelta(days=period_number-1)
+        elif period_type == 'M':
+            calculated_date = utils.get_month_date_to(current_date)
+            while period_number-1:
+                calculated_date = calculated_date+dt.timedelta(days=1)
+                calculated_date = utils.get_month_date_to(calculated_date)
+                period_number -= 1
+            target_date = calculated_date.replace()
+        elif period_type == 'W':
+            calculated_date = current_date+dt.timedelta(weeks=period_number)
+            target_date = calculated_date-dt.timedelta(days=1)
+        return target_date
 
     def parse_source_name(self):
         """Get data source name."""
@@ -1650,6 +1712,31 @@ class Parser():
         column = sa.literal(self.control.process_id).label('rapo_process_id')
         return column
 
+    def parse_iteration_config(self):
+        """Get appropriate period parameters for this control iteration."""
+        input_string = self.control.config['iteration_config'] or '[]'
+        input_config = json.loads(input_string)
+        output_config = []
+        for item_config in input_config:
+            iteration_id = item_config['iteration_id']
+            iteration_description = item_config.get('iteration_description')
+            period_back = item_config['period_back']
+            period_number = item_config['period_number']
+            period_type = item_config['period_type']
+            status = True if item_config['status'] == 'Y' else False
+
+            add_config = {
+                'iteration_id': iteration_id,
+                'iteration_description': iteration_description,
+                'period_back': period_back,
+                'period_number': period_number,
+                'period_type': period_type,
+                'status': status
+            }
+            output_config.append(add_config)
+        return output_config
+
+    def parse_parallelism_hint(self):
     def parse_variables(self):
         """Get control variables.
 

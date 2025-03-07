@@ -6,6 +6,7 @@ from .database import db
 
 from datetime import datetime
 
+
 class Reader():
     """Represents application data reader.
 
@@ -119,8 +120,6 @@ class Reader():
         rows = [dict(row) for row in result]
         return rows
 
-        
-
     def read_control_config_all(self):
         """Get list of all controls in the config table."""
 
@@ -138,7 +137,6 @@ class Reader():
         rows = [dict(row) for row in result]
         return rows
 
-
     def read_control_results_for_day(self):
         """Get list of all control runs for the passed for_day."""
 
@@ -148,15 +146,15 @@ class Reader():
         # select = (join.select().where(sa.and_(log.c.start_date >= from_date, log.c.start_date <= to_date)))
         # select = sa.select([config.c.control_name, log]).select_from(join).where(sa.and_(log.c.start_date >= from_date, log.c.start_date <= to_date))
 
-        select = f"""
-                select 
-                    c.control_name, 
-                    c.control_id, 
+        select = """
+                select
+                    c.control_name,
+                    c.control_id,
                     l.process_id,
                     nvl(l.start_date, l.added) start_date,
-                    l.date_from, 
+                    l.date_from,
                     l.date_to,
-                    case 
+                    case
                         when l.status = 'I' then 'Initiated'
                         when l.status in ('S', 'P', 'F') then 'Running'
                         when l.status = 'D' then 'Success'
@@ -165,14 +163,14 @@ class Reader():
                         when nvl(l.status, 'C') = 'C' then 'Canceled'
                         else l.status
                     end status,
-                    nvl(coalesce(success_a, success), 0) success_a,
-                    nvl(coalesce(success_b, 0), 0) success_b,
-                    nvl(coalesce(fetched_a, fetched), 0) fetched_a,
-                    nvl(coalesce(fetched_b, 0), 0) fetched_b,
-                    nvl(coalesce(errors_a, errors), 0) errors_a,
-                    nvl(coalesce(errors_b, 0), 0) errors_b,
-                    nvl(coalesce(error_level_a, error_level), 0) error_level_a,
-                    nvl(coalesce(error_level_b, 0), 0) error_level_b,
+                    nvl(coalesce(success_number_a, success_number), 0) as success_number_a,
+                    nvl(coalesce(success_number_b, 0), 0) as success_number_b,
+                    nvl(coalesce(fetched_number_a, fetched_number), 0) as fetched_number_a,
+                    nvl(coalesce(fetched_number_b, 0), 0) as fetched_number_b,
+                    nvl(coalesce(error_number_a, error_number), 0) as error_number_a,
+                    nvl(coalesce(error_number_b, 0), 0) as error_number_b,
+                    nvl(coalesce(error_level_a, error_level), 0) as error_level_a,
+                    nvl(coalesce(error_level_b, 0), 0) as error_level_b,
                     text_log,
                     nvl(text_error, text_message) text_error,
                     prerequisite_value,
@@ -182,7 +180,8 @@ class Reader():
                 where 1=1
                     and c.control_name is not null
                 order by process_id desc
-                fetch first 100 rows only"""
+                fetch first 100 rows only
+        """
 
         result = db.execute(select)
         rows = [dict(row) for row in result]
@@ -228,12 +227,13 @@ class Reader():
             insert = config.insert().values(data)
             result = db.execute(insert)
         return result
-    
+
     def delete_control(self, control_id):
         """Delete control from the config table of the passed control_id."""
         config = db.tables.config
         delete = config.delete().where(config.c.control_id == control_id)
         result = db.execute(delete)
         return result
-        
+
+
 reader = Reader()

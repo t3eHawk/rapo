@@ -28,12 +28,12 @@ from .case import (
 
 
 class Control():
-    """Represents certain RAPO control and acts like its API.
+    """Represents a control and acts like its API.
 
     Parameters
     ----------
     name : str, optional
-        Name of the control from RAPO_CONFIG.
+        Name of the control from configuration table.
     timestamp : float or None
         Timestamp of this process.
     date_from : str or datetime, optional
@@ -44,7 +44,7 @@ class Control():
     Attributes
     ----------
     name : str
-        Name of the control from RAPO_CONFIG.
+        Name of the control from configuration table.
     timestamp : float or None
         Timestamp of this process.
     parser : rapo.Parser
@@ -54,17 +54,17 @@ class Control():
     log : sqlalchemy.Table
         RAPO_LOG table object.
     config : sqlalchemy.RowProxy
-        RAPO_CONFIG record for this control.
+        configuration table record for this control.
     id : int
-        ID of the control from RAPO_CONFIG.
+        ID of the control from configuration table.
     group : str or None
-        Group of the control from RAPO_CONFIG.
+        Group of the control from configuration table.
     type : str or None
-        Type of the control from RAPO_CONFIG. See RAPO_REF_TYPES table.
-    subtype: str or None
-        Method of the control from RAPO_CONFIG. See RAPO_REF_METHODS table.
+        Type of the control from configuration table. See reference types
+        table.
     engine : str or None
-        Engine of the control from RAPO_CONFIG. See RAPO_REF_ENGINES table.
+        Engine of the control from configuration table. See reference engines
+        table.
     process_id : int or None
         Process id from RAPO_LOG.
     pid : int or None
@@ -97,7 +97,7 @@ class Control():
         SQL statement to fetch data from data source B.
     rule_config : list
         Configuration defining success result.
-    error_config : list
+    error_definition : list
         Configuration defining error result.
     output_columns : list or None
         Output column configuration.
@@ -133,26 +133,26 @@ class Control():
         Proxy object reflecting table with found discrapancies from A.
     error_table_b : sqlalchemy.Table
         Proxy object reflecting table with found discrapancies from B.
-    fetched : int or None
+    fetched_number : int or None
         Number of fetched records from data source.
-    success : int or None
+    success_number : int or None
         Number of success results.
-    errors : int or None
+    error_number : int or None
         Number of discrapancies.
     error_level : float or None
         Indicator presenting the percentage of discrapancies among the fetched
         records.
-    fetched_a : int or None
+    fetched_number_a : int or None
         Number of fetched records from data source A.
-    fetched_b : int or None
+    fetched_number_b : int or None
         Number of fetched records from data source B.
-    success_a : int or None
+    success_number_a : int or None
         Number of success results in A.
-    success_b : int or None
+    success_number_b : int or None
         Number of success results in B.
-    errors_a : int or None
+    error_number_a : int or None
         Number of discrapancies in A.
-    errors_b : int or None
+    error_number_b : int or None
         Number of discrapancies in B.
     error_level_a : float or None
         Indicator presenting the percentage of discrapancies among the fetched
@@ -174,9 +174,7 @@ class Control():
         self.id = int(self.config['control_id'])
         self.group = self.config['control_group']
         self.type = self.config['control_type']
-        self.subtype = self.config['control_subtype']
         self.engine = self.config['control_engine']
-        self.timestamp = timestamp
 
         self.parser = Parser(self)
         self.executor = Executor(self)
@@ -196,17 +194,17 @@ class Control():
             self.date_from = self.result['date_from']
             self.date_to = self.result['date_to']
 
-            self.fetched = self.result['fetched']
-            self.success = self.result['success']
-            self.errors = self.result['errors']
+            self.fetched_number = self.result['fetched_number']
+            self.success_number = self.result['success_number']
+            self.error_number = self.result['error_number']
             self.error_level = self.result['error_level']
 
-            self.fetched_a = self.result['fetched_a']
-            self.fetched_b = self.result['fetched_b']
-            self.success_a = self.result['success_a']
-            self.success_b = self.result['success_b']
-            self.errors_a = self.result['errors_a']
-            self.errors_b = self.result['errors_b']
+            self.fetched_number_a = self.result['fetched_number_a']
+            self.fetched_number_b = self.result['fetched_number_b']
+            self.success_number_a = self.result['success_number_a']
+            self.success_number_b = self.result['success_number_b']
+            self.error_number_a = self.result['error_number_a']
+            self.error_number_b = self.result['error_number_b']
             self.error_level_a = self.result['error_level_a']
             self.error_level_b = self.result['error_level_b']
         else:
@@ -237,19 +235,19 @@ class Control():
                 self.date_from = self.parser.parse_date(date_from)
                 self.date_to = self.parser.parse_date(date_to)
 
-            self.fetched = None
-            self.success = None
-            self.errors = None
+            self.fetched_number = None
+            self.success_number = None
+            self.error_number = None
             self.error_level = None
 
-            self.fetched_a = None
-            self.success_a = None
-            self.errors_a = None
+            self.fetched_number_a = None
+            self.success_number_a = None
+            self.error_number_a = None
             self.error_level_a = None
 
-            self.fetched_b = None
-            self.success_b = None
-            self.errors_b = None
+            self.fetched_number_b = None
+            self.success_number_b = None
+            self.error_number_b = None
             self.error_level_b = None
 
         self.source_table = None
@@ -283,7 +281,7 @@ class Control():
         value : str
             Control name with or withoud process id.
         """
-        if self.process_id is None:
+        if not self.process_id:
             return f'[{self.name}]'
         else:
             return f'[{self.name}:{self.process_id}]'
@@ -450,7 +448,7 @@ class Control():
         time_limit = self.config['timeout']
         if self.duration > time_limit:
             return True
-            return False
+        return False
 
     @property
     def select(self):
@@ -510,6 +508,10 @@ class Control():
     @property
     def has_cases(self):
         """Identify whether control is case-configured or not."""
+        if self.config['case_config'] and self.config['case_definition']:
+            return True
+        return False
+
     @property
     def has_iterations(self):
         """Identify whether control is iteration-configured or not."""
@@ -535,18 +537,20 @@ class Control():
         return self.parser.parse_case_config()
 
     @property
-    def result_config(self):
-        """Get control result configuration."""
-        return self.parser.parse_result_config()
+    def case_definition(self):
+        """Get control result definition."""
+        return self.parser.parse_case_definition()
 
     @property
-    def error_config(self):
-        """Get control error configuration."""
-        if self.type == 'ANL':
-            return self.parser.parse_analyze_error_config()
-        elif self.type == 'REC':
-            return self.parser.parse_reconciliation_error_config()
-        elif self.type == 'REP':
+    def error_definition(self):
+        """Get control error definition."""
+        if self.is_analysis:
+            return self.parser.parse_analyze_error_definition()
+        elif self.is_reconciliation:
+            return []
+        elif self.is_comparison:
+            return self.parser.parse_comparison_error_definition()
+        elif self.is_report:
             return []
 
     @property
@@ -762,8 +766,8 @@ class Control():
                             if self._progress():
                                 if self._finish():
                                     if self._complete():
-                                    if self._done():
-                                        self._postrun_hook()
+                                        if self._done():
+                                            self._postrun_hook()
                 else:
                     self._do_not_resume()
             else:
@@ -883,7 +887,7 @@ class Control():
                 return self._escape()
             else:
                 return self._continue()
-            return self._continue()
+        return self._continue()
 
     def _cancel(self):
         logger.info(f'{self} Canceling control...')
@@ -1081,7 +1085,7 @@ class Control():
                 self.executor.save_reconciliation_output_b()
         elif self.is_comparison:
             if self.error_number or 0 > 0:
-                    self.executor.save_mismatches()
+                self.executor.save_mismatches()
         elif self.is_report:
             if self.fetched_number or 0 > 0:
                 self.executor.save_errors()
@@ -1448,7 +1452,7 @@ class Parser():
         if self.control.type == 'REC':
             for s in ['a', 'b']:
                 name = f'rapo_res{s}_{self.control.name}'.lower()
-            names.append(name)
+                names.append(name)
         return names
 
     def parse_output_tables(self):
@@ -1586,40 +1590,40 @@ class Parser():
         else:
             logger.debug(f'{self.c} Case configuration not found')
 
-    def parse_result_config(self):
-        """Get main result statement taken from the configuration table.
+    def parse_case_definition(self):
+        """Get main case statement taken from the configuration table.
 
         Returns
         -------
         config : str or None
-            SQL-like logical expression with a result mapping.
+            SQL-like logical expression with a case mapping.
         """
-        logger.debug(f'{self.c} Parsing result configuration...')
-        string = self.control.config['result_config']
+        logger.debug(f'{self.c} Parsing case definition...')
+        string = self.control.config['case_definition']
         if string:
-            custom_config = self.control.config['result_config']
+            custom_config = self.control.config['case_definition']
             final_config = db.formatter(custom_config)
-            logger.debug(f'{self.c} Result configuration parsed')
+            logger.debug(f'{self.c} Case definition parsed')
             return final_config
         else:
-            logger.debug(f'{self.c} Result configuration not found')
+            logger.debug(f'{self.c} Case definition not found')
 
-    def parse_analyze_error_config(self):
-        """Get analyze error configuration.
+    def parse_analyze_error_definition(self):
+        """Get analyze error definition.
 
         Returns
         -------
         config : list or None
             List with dictionaries where presented all keys for discrapancies.
         """
-        logger.debug(f'{self.c} Parsing error configuration...')
-        string = self.control.config['error_config']
+        logger.debug(f'{self.c} Parsing error definition...')
+        string = self.control.config['error_definition']
         if utils.is_json(string):
             config = self._parse_json_filter(string)
-            logger.debug(f'{self.c} Error configuration parsed')
+            logger.debug(f'{self.c} Error definition parsed')
             return config
         else:
-            logger.debug(f'{self.c} Error configuration not found')
+            logger.debug(f'{self.c} Error definition not found')
 
     def parse_analyze_error_sql(self):
         """Prepare analyze error SQL expression.
@@ -1630,11 +1634,11 @@ class Parser():
             String with SQL expression to select discrapancies.
         """
         logger.debug(f'{self.c} Parsing error SQL...')
-        string = self.control.config['error_config']
+        string = self.control.config['error_definition']
         if utils.is_json(string):
             table = self.control.input_table
             expressions = []
-            config = self.parse_analyze_error_config()
+            config = self.parse_analyze_error_definition()
             for i in config:
                 expression = []
                 connexion = i['connexion']
@@ -1753,16 +1757,16 @@ class Parser():
         logger.debug(f'{self.c} Rule configuration parsed')
         return config
 
-    def parse_reconciliation_error_config(self):
-        """Get reconciliation error configuration.
+    def parse_comparison_error_definition(self):
+        """Get comparison error definition.
 
         Returns
         -------
         config : list
             List with dictionaries where presented all keys for mismatching.
         """
-        logger.debug(f'{self.c} Parsing error configuration...')
-        raw = self.control.config['error_config']
+        logger.debug(f'{self.c} Parsing error definition...')
+        raw = self.control.config['error_definition']
         config = []
         for item in json.loads(raw or '[]'):
             column_a = item['column_a'].lower()
@@ -1770,7 +1774,7 @@ class Parser():
 
             new = {'column_a': column_a, 'column_b': column_b}
             config.append(new)
-        logger.debug(f'{self.c} Error configuration parsed')
+        logger.debug(f'{self.c} Error definition parsed')
         return config
 
     def _parse_json_filter(self, string):
@@ -1805,7 +1809,7 @@ class Parser():
         columns : list or None
             List with dictionaries where output columns configuration is
             presented.
-            Will be None if configuration is not filled in RAPO_CONFIG.
+            Will be None if parameter is not filled in configuration table.
         """
         config = self.control.config['output_table']
         columns = self._parse_output_columns(config)
@@ -1819,7 +1823,7 @@ class Parser():
         columns : list or None
             List with dictionaries where output A columns configuration is
             presented.
-            Will be None if configuration is not filled in RAPO_CONFIG.
+            Will be None if parameter is not filled in configuration table.
         """
         config = self.control.config['output_table_a']
         columns = self._parse_output_columns(config)
@@ -1833,7 +1837,7 @@ class Parser():
         columns : list or None
             List with dictionaries where output B columns configuration is
             presented.
-            Will be None if configuration is not filled in RAPO_CONFIG.
+            Will be None if parameter is not filled in configuration table.
         """
         config = self.control.config['output_table_b']
         columns = self._parse_output_columns(config)
@@ -1873,8 +1877,8 @@ class Parser():
             columns = [RESULT_KEY, RESULT_VALUE, RESULT_TYPE]
         elif self.control.is_reconciliation:
             columns = [RESULT_TYPE, DISCREPANCY_ID, DISCREPANCY_DESCRIPTION]
-            logger.debug(f'{self.c} Mandatory columns parsed')
-            return columns
+        logger.debug(f'{self.c} Mandatory columns parsed')
+        return columns
 
     def parse_result_columns(self):
         """Get result columns based on result statement and case configuration.
@@ -1885,7 +1889,7 @@ class Parser():
             Object representing result column.
         """
         logger.debug(f'{self.c} Parsing result columns...')
-        custom_statement = self.control.config['result_config']
+        custom_statement = self.control.config['case_definition']
         if self.control.is_analysis and custom_statement:
             columns = []
             case_config = self.parse_case_config()
@@ -1934,7 +1938,7 @@ class Parser():
 
         Returns
         -------
-        columns : sqlalchemy column
+        column : sqlalchemy column
             Object representing process identification column.
         """
         column = sa.literal(self.control.process_id).label('rapo_process_id')
@@ -2096,7 +2100,7 @@ class Executor():
             self._index_table(table_name, key_field_name)
 
     def analyze(self):
-        """Run data analyze used for control with ANL type.
+        """Run data analysis control.
 
         Returns
         -------
@@ -2122,17 +2126,17 @@ class Executor():
                 columns.append(column)
             select = sa.select(columns)
 
-        tablename = f'rapo_temp_err_{self.control.process_id}'
+        table_name = f'rapo_temp_err_{self.control.process_id}'
         clause = sa.text(self.control.error_sql)
         select = select.where(clause)
         select = db.compile(select)
-        ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
+        ctas = sa.text(f'CREATE TABLE {table_name} AS\n{select}')
         text = db.formatter.document(ctas)
-        logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
+        logger.info(f'{self.c} Creating {table_name} with query:\n{text}')
         db.execute(ctas)
-        logger.debug(f'{self.c} {tablename} created')
+        logger.debug(f'{self.c} {table_name} created')
 
-        table = db.table(tablename)
+        table = db.table(table_name)
         logger.debug(f'{self.c} Analyzing done')
         return table
 
@@ -2486,7 +2490,7 @@ class Executor():
         db.parallelize(line_a, line_b, output=logger.info, tag=self.control)
 
     def match(self):
-        """Run data matching for control with REC type and MA subtype.
+        """Run data matching for comparison control.
 
         Returns
         -------
@@ -2533,25 +2537,25 @@ class Executor():
         select = sa.select(columns).select_from(join)
 
         keys = []
-        for error in self.control.error_config:
+        for error in self.control.error_definition:
             column_a = table_a.c[error['column_a']]
             column_b = table_b.c[error['column_b']]
             select = select.where(column_a == column_b)
 
-        tablename = f'rapo_temp_md_{self.control.process_id}'
+        table_name = f'rapo_temp_md_{self.control.process_id}'
         select = db.compile(select)
-        ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
+        ctas = sa.text(f'CREATE TABLE {table_name} AS\n{select}')
         text = db.formatter.document(ctas)
-        logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
+        logger.info(f'{self.c} Creating {table_name} with query:\n{text}')
         db.execute(ctas)
-        logger.debug(f'{self.c} {tablename} created')
+        logger.debug(f'{self.c} {table_name} created')
 
-        table = db.table(tablename)
+        table = db.table(table_name)
         logger.debug(f'{self.c} Matches defined')
         return table
 
     def mismatch(self):
-        """Run data mismatching for control with REC type and MA subtype.
+        """Run data mismatching for comparison control.
 
         Returns
         -------
@@ -2597,23 +2601,23 @@ class Executor():
                 keys = (column_a == column_b)
             else:
                 keys &= (column_a == column_b)
-        join = table_a.outerjoin(table_b, keys)
+        join = table_a.join(table_b, keys)
         select = sa.select(columns).select_from(join)
 
-        for error in self.control.error_config:
+        for error in self.control.error_definition:
             column_a = table_a.c[error['column_a']]
             column_b = table_b.c[error['column_b']]
-            select = select.where((column_a != column_b) | (column_b == None) )
+            select = select.where(column_a != column_b)
 
-        tablename = f'rapo_temp_nmd_{self.control.process_id}'
+        table_name = f'rapo_temp_nmd_{self.control.process_id}'
         select = db.compile(select)
-        ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
+        ctas = sa.text(f'CREATE TABLE {table_name} AS\n{select}')
         text = db.formatter.document(ctas)
-        logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
+        logger.info(f'{self.c} Creating {table_name} with query:\n{text}')
         db.execute(ctas)
-        logger.debug(f'{self.c} {tablename} created')
+        logger.debug(f'{self.c} {table_name} created')
 
-        table = db.table(tablename)
+        table = db.table(table_name)
         logger.debug(f'{self.c} Mismatches defined')
         return table
 
@@ -2875,7 +2879,7 @@ class Executor():
                 chosen_columns.extend(self.control.output_columns_b)
                 if not chosen_columns:
                     output_columns.extend(self.control.source_table_b.columns)
-            mandatory_columns = self.control.mandatory_columns
+        mandatory_columns = self.control.mandatory_columns
         process_id = self.control.key_column
 
         for chosen_column in chosen_columns:
@@ -2883,23 +2887,23 @@ class Executor():
             column_b = chosen_column['column_b']
             column_name = chosen_column['column']
             if column_a or column_b:
-                        table_a = self.control.source_table_a
-                        table_b = self.control.source_table_b
+                table_a = self.control.source_table_a
+                table_b = self.control.source_table_b
                 if column_a and column_b:
-                            column_a = table_a.c[column_a]
-                            column_b = table_b.c[column_b]
-                            column = sa.func.coalesce(column_a, column_b)
+                    column_a = table_a.c[column_a]
+                    column_b = table_b.c[column_b]
+                    column = sa.func.coalesce(column_a, column_b)
                 elif column_a:
-                            column = table_a.c[column_a]
+                    column = table_a.c[column_a]
                 elif column_b:
-                            column = table_b.c[column_b]
+                    column = table_b.c[column_b]
                 column = column.label(column_name) if column_name else column
-                    else:
-                        table = self.control.source_table
+            else:
+                table = self.control.source_table
                 column = table.c[column_name]
             output_columns.append(column)
-                for mandatory_column in mandatory_columns:
-                    column = mandatory_column.null
+        for mandatory_column in mandatory_columns:
+            column = mandatory_column.null
             output_columns.append(column)
         output_columns.append(process_id)
 

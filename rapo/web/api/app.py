@@ -109,12 +109,12 @@ def get_all_controls():
 def get_control_versions():
     """Get list of control versions by ID in JSON."""
     request = flask.request
-    
+
     if 'control_id' in request.args:
         rows = reader.read_control_config_versions(request.args['control_id'])
     else:
         rows = []
-    
+
     response = flask.jsonify(rows)
     return response
 
@@ -122,7 +122,7 @@ def get_control_versions():
 @app.route('/api/get-control-runs')
 @auth.login_required
 def get_control_runs():
-    """Get list of all control runs in JSON."""    
+    """Get list of all control runs in JSON."""
     rows = reader.read_control_results_for_day()
     response = flask.jsonify(rows)
     return response
@@ -142,12 +142,12 @@ def get_datasources():
 def get_datasource_coluimns():
     """Get list of DB datasource columns in JSON."""
     request = flask.request
-    
+
     if 'datasource_name' in request.args:
         rows = reader.read_datasource_columns(request.args['datasource_name'])
     else:
         rows = []
-    
+
     response = flask.jsonify(rows)
     return response
 
@@ -157,12 +157,12 @@ def get_datasource_coluimns():
 def get_datasource_date_coluimns():
     """Get list of tables in JSON."""
     request = flask.request
-    
+
     if 'datasource_name' in request.args:
         rows = reader.read_datasource_date_columns(request.args['datasource_name'])
     else:
         rows = []
-    
+
     response = flask.jsonify(rows)
     return response
 
@@ -175,7 +175,7 @@ def save_control():
 
     if request.method == 'POST':
         try:
-            data = request.get_json() 
+            data = request.get_json()
             reader.save_control(data)
             response = flask.jsonify(status=200)
         except:
@@ -195,7 +195,7 @@ def delete_control():
 
     if request.method == 'DELETE':
         reader.delete_control(control_id)
-        
+
     response = flask.jsonify(status=200)
     return response
 
@@ -213,16 +213,16 @@ def get_control_run():
                              start_date=control.start_date,
                              end_date=control.end_date,
                              status=control.status,
-                             fetched=control.fetched,
-                             success=control.success,
-                             errors=control.errors,
+                             fetched_number=control.fetched_number,
+                             success_number=control.success_number,
+                             error_number=control.error_number,
                              error_level=control.error_level,
-                             fetched_a=control.fetched_a,
-                             fetched_b=control.fetched_b,
-                             success_a=control.success_a,
-                             success_b=control.success_b,
-                             errors_a=control.errors_a,
-                             errors_b=control.errors_b,
+                             fetched_number_a=control.fetched_number_a,
+                             fetched_number_b=control.fetched_number_b,
+                             success_number_a=control.success_number_a,
+                             success_number_b=control.success_number_b,
+                             error_number_a=control.error_number_a,
+                             error_number_b=control.error_number_b,
                              error_level_a=control.error_level_a,
                              error_level_b=control.error_level_b)
     return response

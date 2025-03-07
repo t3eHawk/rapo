@@ -540,6 +540,11 @@ class Control():
         return self.parser.parse_mandatory_columns()
 
     @property
+    def parallelism(self):
+        """Get parameter describing execution parallelism."""
+        return self.config['parallelism']
+
+    @property
     def need_a(self):
         """Get parameter defining necessity of data source A saving."""
         return self.parser.parse_boolean('need_a')
@@ -1737,6 +1742,20 @@ class Parser():
         return output_config
 
     def parse_parallelism_hint(self):
+        """Get SQL expression with parallelism hint.
+
+        Returns
+        -------
+        expression : string
+            String with SQL expression with parallelism hint.
+        """
+        degree_of_parallelism = self.control.parallelism
+        if degree_of_parallelism:
+            expression = f'/*+ parallel({degree_of_parallelism}) */'
+        else:
+            expression = ''
+        return expression
+
     def parse_variables(self):
         """Get control variables.
 
@@ -2229,15 +2248,19 @@ class Executor():
         db.execute(stmt)
         logger.debug(f'{self.c} Hook procedure executed')
 
-    def _fetch_records_to_table(self, select, tablename):
+    def _fetch_records_to_table(self, select, table_name):
         logger.debug(f'{self.c} Start fetching...')
+        parallelism = self.control.config['parallelism']
+        if parallelism:
+            hint = f'parallel({parallelism})'
+            select = select.with_hint(sa.text(table_name), hint)
         select = db.compile(select)
-        ctas = sa.text(f'CREATE TABLE {tablename} AS\n{select}')
+        ctas = sa.text(f'CREATE TABLE {table_name} AS\n{select}')
         text = db.formatter.document(ctas)
-        logger.info(f'{self.c} Creating {tablename} with query:\n{text}')
+        logger.info(f'{self.c} Creating {table_name} with query:\n{text}')
         db.execute(ctas)
-        logger.info(f'{self.c} {tablename} created')
-        table = db.table(tablename)
+        logger.info(f'{self.c} {table_name} created')
+        table = db.table(table_name)
         logger.debug(f'{self.c} Fetching done')
         return table
 

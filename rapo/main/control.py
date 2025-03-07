@@ -1620,9 +1620,9 @@ class Parser():
                 field_name = f'rapo_result_{field}'
                 final_statement = custom_statement
                 for replace in replaces:
-                    old = replace[0]
-                    new = replace[1][field]
-                    final_statement = final_statement.replace(old, new)
+                    old = replace[0]+r'\s'
+                    new = replace[1][field]+r'\n'
+                    final_statement = re.sub(old, new, final_statement)
                 final_statement = db.formatter(final_statement)
                 column = sa.literal_column(final_statement).label(field_name)
                 columns.append(column)

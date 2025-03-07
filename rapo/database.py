@@ -186,7 +186,7 @@ class Database():
         return table
 
     def drop(self, table_name):
-        """Drop database table by name.
+        """Delete database table by name.
 
         Parameters
         ----------
@@ -194,6 +194,17 @@ class Database():
             Name of the database table to be dropped.
         """
         query = f'drop table {table_name}'
+        self.execute(query)
+
+    def purge(self, table_name):
+        """Delete database table by name permanently.
+
+        Parameters
+        ----------
+        table_name : str
+            Name of the database table to be dropped.
+        """
+        query = f'drop table {table_name} purge'
         self.execute(query)
 
     def truncate(self, table_name):

@@ -2112,7 +2112,7 @@ class Executor():
         """Clean all temporary tables created during control execution."""
         logger.debug(f'{self.c} Dropping temporary tables...')
         for table in self.control.temp_tables:
-            table.drop(db.engine)
+            db.purge(table.name)
         logger.debug(f'{self.c} Temporary tables dropped')
 
     def prerun_hook(self):

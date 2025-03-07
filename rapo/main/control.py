@@ -720,6 +720,7 @@ class Control():
                         if self._start():
                             if self._progress():
                                 if self._finish():
+                                    if self._complete():
                                     if self._done():
                                         self._postrun_hook()
                 else:
@@ -820,6 +821,22 @@ class Control():
             return self._escape()
         else:
             logger.info(f'{self} Control finished')
+            return self._continue()
+
+    def _complete(self):
+        statement = self.parser.parse_completion_statement()
+        if statement:
+            logger.info(f'{self} Running control completion SQL scripts...')
+            try:
+                result = db.execute(statement)
+                rowcount = result.rowcount
+                logger.info(f'{self} Control completion SQL scripts '
+                            f'successfully performed returning {rowcount}')
+            except Exception:
+                logger.error()
+                return self._escape()
+            else:
+                return self._continue()
             return self._continue()
 
     def _cancel(self):
@@ -1387,6 +1404,16 @@ class Parser():
             Formatted SQL query that must be performed before the control.
         """
         return self._parse_statement('preparation_sql')
+
+    def parse_completion_statement(self):
+        """Get completion statement taken from the configuration table.
+
+        Returns
+        -------
+        final_statement : str or None
+            Formatted SQL query that must be performed after the control.
+        """
+        return self._parse_statement('completion_sql')
 
     def _parse_statement(self, statement_name):
         custom_statement = self.control.config[statement_name]

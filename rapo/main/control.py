@@ -2270,3 +2270,16 @@ class Executor():
         fetched = db.execute(count).scalar()
         logger.debug(f'{self.c} Fetched in {table} counted')
         return fetched
+
+    def _index_table(self, table_name, key_field_name):
+        logger.debug(f'{self.c} Creating index for {table_name}...')
+        index_name = f'{table_name}_ix'
+        parallelism = self.control.config['parallelism'] or 1
+        create_index = (f'create index {index_name} '
+                        f'on {table_name} ({key_field_name}) unusable')
+        rebuild_index = (f'alter index {index_name} rebuild online '
+                         f'parallel {parallelism} '
+                         'nologging')
+        db.execute(create_index)
+        db.execute(rebuild_index)
+        logger.debug(f'{self.c} Index for {table_name} created')

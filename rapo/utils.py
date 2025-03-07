@@ -119,5 +119,12 @@ class Utils():
         else:
             return False
 
+    def get_config(self, config_id, config_list):
+        """Get chosen iteration configuration by its number."""
+        for item_config in config_list:
+            key_name = list(item_config)[0]
+            if key_name.endswith('id'):
+                if item_config[key_name] == config_id:
+                    return item_config
 
 utils = Utils()

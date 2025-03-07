@@ -2,6 +2,8 @@
 
 import os
 import sys
+import threading as th
+import queue as qe
 
 import sqlalchemy as sa
 import cx_Oracle as oracle
@@ -155,7 +157,7 @@ class Database():
         connection = self.engine.connect()
         return connection
 
-    def execute(self, statement):
+    def execute(self, statement, output=None, tag=None):
         """Execute given SQL statement.
 
         Returns
@@ -164,6 +166,11 @@ class Database():
             Execution result object.
         """
         try:
+            if output:
+                document = self.formatter.document(statement)
+                tag = f'{tag} ' if tag else ''
+                message = f'{tag}Running query:\n{document}'
+                output(message)
             conn = self.connect()
             result = conn.execute(statement)
         except Exception as error:
@@ -172,6 +179,49 @@ class Database():
         else:
             conn.close()
             return result
+
+    def execute_many(self, *statements, result_queue=None, **kwargs):
+        """Execute given SQL statements.
+
+        Returns
+        -------
+        result_list : list of sqlalchemy.engine.CursorResult
+            Execution result objects in order of initial statements.
+        """
+        result_list = []
+        for statement in statements:
+            result = self.execute(statement, **kwargs)
+            result_list.append(result)
+        if result_queue:
+            result_queue.put(result_list)
+        return result_list
+
+    def parallelize(self, *statement_groups, **kwargs):
+        """Execute given SQL statement groups in parallel threads.
+
+        Returns
+        -------
+        result_groups : list of sqlalchemy.engine.CursorResult
+            Execution result objects in structure of initial statement groups.
+        """
+        current_thread = th.current_thread()
+        thread_list = []
+        result_queue = qe.Queue()
+        for statement_group in statement_groups:
+            action_name = statement_group['name']
+            statement_list = statement_group['statements']
+            thread_name = f'{current_thread.name}({action_name})'
+            thread = th.Thread(target=self.execute_many,
+                               name=thread_name,
+                               args=statement_list,
+                               kwargs={'result_queue': result_queue,
+                                       **kwargs})
+            thread.start()
+            thread_list.append(thread)
+        for thread in thread_list:
+            thread.join()
+        # result_groups = list(result_queue)
+        return result_queue
 
     def table(self, name):
         """Get database table.

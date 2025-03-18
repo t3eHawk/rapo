@@ -1,5 +1,5 @@
 -- ============================================================================
--- Migration scripts from Rapo v0.5.1 to v0.6.0
+-- Migration scripts from Rapo v0.5.1 to v0.6.1
 -- ============================================================================
 
 -- ------------------------------------
@@ -7,7 +7,9 @@
 
 -- Modify control types to replace previous Reconciliation design.
 insert into rapo_ref_types values ('CMP', 'Comparison');
-update rapo_config set control_type = 'CMP'
+commit;
+
+update rapo_config set control_type = 'CMP', control_subtype = null
  where control_type = 'REC'
    and control_subtype = 'MA'
 ;

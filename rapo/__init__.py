@@ -1,7 +1,7 @@
 """Python Revenue Assurance Process Optimizer."""
 
-from .main.scheduler import Scheduler
-from .main.control import Control
+from .core.scheduler import Scheduler
+from .core.control import Control
 from .web import Server
 
 
@@ -10,7 +10,7 @@ __copyright__ = 'Copyright 2024, The Rapo project'
 __credits__ = ['Timur Faradzhov', 'Kostadin Taneski']
 
 __license__ = 'MIT'
-__version__ = '0.6.1'
+__version__ = '0.6.2'
 __maintainer__ = 'Timur Faradzhov'
 __email__ = 'timurfaradzhov@gmail.com'
 __status__ = 'Development'

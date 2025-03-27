@@ -197,7 +197,6 @@ class Control():
             self.fetched_number = self.result['fetched_number']
             self.success_number = self.result['success_number']
             self.error_number = self.result['error_number']
-            self.error_level = self.result['error_level']
 
             self.fetched_number_a = self.result['fetched_number_a']
             self.fetched_number_b = self.result['fetched_number_b']
@@ -205,8 +204,6 @@ class Control():
             self.success_number_b = self.result['success_number_b']
             self.error_number_a = self.result['error_number_a']
             self.error_number_b = self.result['error_number_b']
-            self.error_level_a = self.result['error_level_a']
-            self.error_level_b = self.result['error_level_b']
         else:
             self.start_date = None
             self.end_date = None
@@ -238,17 +235,14 @@ class Control():
             self.fetched_number = None
             self.success_number = None
             self.error_number = None
-            self.error_level = None
 
             self.fetched_number_a = None
             self.success_number_a = None
             self.error_number_a = None
-            self.error_level_a = None
 
             self.fetched_number_b = None
             self.success_number_b = None
             self.error_number_b = None
-            self.error_level_b = None
 
         self.source_table = None
         self.source_table_a = None
@@ -328,6 +322,113 @@ class Control():
         return self._process_id
 
     @property
+    def is_analysis(self):
+        """Identify whether control is analysis or not."""
+        return True if self.type == 'ANL' else False
+
+    @property
+    def is_reconciliation(self):
+        """Identify whether control is reconciliation or not."""
+        return True if self.type == 'REC' else False
+
+    @property
+    def is_comparison(self):
+        """Identify whether control is comparison or not."""
+        return True if self.type == 'CMP' else False
+
+    @property
+    def is_report(self):
+        """Identify whether control is report or not."""
+        return True if self.type == 'REP' else False
+
+    @property
+    def status(self):
+        """Get control run status."""
+        return self._status
+
+    @status.setter
+    def status(self, value):
+        """Set control run status."""
+        if isinstance(value, str) and len(value) == 1:
+            if hasattr(self, '_status'):
+                self._status = value
+                self.updated = dt.datetime.now()
+                logger.info(f'{self} Status changed to {self._status}')
+            else:
+                self._status = value
+        elif value is None:
+            self._status = None
+        else:
+            message = f'incorrect status: {value}'
+            raise ValueError(message)
+
+    @property
+    def duration(self):
+        """Get control duration."""
+        if self.end_date:
+            return (self.end_date-self.start_date).seconds
+        current_date = dt.datetime.now()
+        return (current_date-self.start_date).seconds
+
+    @property
+    def initiated(self):
+        """Check if control is initiated."""
+        if self.status == 'I':
+            return True
+        else:
+            return False
+
+    @property
+    def working(self):
+        """Check if control is working."""
+        if self.status in ('S', 'P', 'F'):
+            return True
+        else:
+            return False
+
+    @property
+    def timeout(self):
+        """Check if control time limit is reached."""
+        time_limit = self.config['timeout']
+        if self.duration > time_limit:
+            return True
+        return False
+
+    @property
+    def error_level(self):
+        """Calculate control error level."""
+        if self.is_analysis:
+            if (self.fetched_number or 0) > 0:
+                return (self.error_number/self.fetched_number)*100
+        elif self.is_comparison:
+            total_number = self.success_number+self.error_number
+            return (self.error_number/total_number)*100
+
+    @property
+    def error_level_a(self):
+        """Calculate control error level A."""
+        if self.is_reconciliation:
+            if self.need_a and (self.fetched_number_a or 0) > 0:
+                if self.error_number_a is not None:
+                    return (self.error_number_a/self.fetched_number_a)*100
+
+    @property
+    def error_level_b(self):
+        """Calculate control error level B."""
+        if self.is_reconciliation:
+            if self.need_b and (self.fetched_number_b or 0) > 0:
+                if self.error_number_b is not None:
+                    return (self.error_number_b/self.fetched_number_b)*100
+
+    @property
+    def text_error(self):
+        """Get textual error representation of current control run."""
+        errors = self._all_errors.copy()
+        texts = [''.join(tb.format_exception(*error)) for error in errors]
+        text = f'{str():->40}\n'.join(texts)
+        return text
+
+    @property
     def source_name(self):
         """Get control data source name."""
         return self.parser.parse_source_name()
@@ -393,64 +494,6 @@ class Control():
         return self.parser.parse_key_column()
 
     @property
-    def variables(self):
-        """Get control variables."""
-        return self.parser.parse_variables()
-
-    @property
-    def status(self):
-        """Get control run status."""
-        return self._status
-
-    @status.setter
-    def status(self, value):
-        """Set control run status."""
-        if isinstance(value, str) and len(value) == 1:
-            if hasattr(self, '_status'):
-                self._status = value
-                self.updated = dt.datetime.now()
-                logger.info(f'{self} Status changed to {self._status}')
-            else:
-                self._status = value
-        elif value is None:
-            self._status = None
-        else:
-            message = f'incorrect status: {value}'
-            raise ValueError(message)
-
-    @property
-    def duration(self):
-        """Get control duration."""
-        if self.end_date:
-            return (self.end_date-self.start_date).seconds
-        current_date = dt.datetime.now()
-        return (current_date-self.start_date).seconds
-
-    @property
-    def initiated(self):
-        """Check if control is initiated."""
-        if self.status == 'I':
-            return True
-        else:
-            return False
-
-    @property
-    def working(self):
-        """Check if control is working."""
-        if self.status in ('S', 'P', 'F'):
-            return True
-        else:
-            return False
-
-    @property
-    def timeout(self):
-        """Check if control time limit is reached."""
-        time_limit = self.config['timeout']
-        if self.duration > time_limit:
-            return True
-        return False
-
-    @property
     def select(self):
         """Get SQL statement to fetch data from data source."""
         return self.parser.parse_select()
@@ -484,40 +527,6 @@ class Control():
     def temp_tables(self):
         """Get temporary tables."""
         return self.parser.parse_temp_tables()
-
-    @property
-    def is_analysis(self):
-        """Identify whether control is analysis or not."""
-        return True if self.type == 'ANL' else False
-
-    @property
-    def is_reconciliation(self):
-        """Identify whether control is reconciliation or not."""
-        return True if self.type == 'REC' else False
-
-    @property
-    def is_comparison(self):
-        """Identify whether control is comparison or not."""
-        return True if self.type == 'CMP' else False
-
-    @property
-    def is_report(self):
-        """Identify whether control is report or not."""
-        return True if self.type == 'REP' else False
-
-    @property
-    def has_cases(self):
-        """Identify whether control is case-configured or not."""
-        if self.config['case_config'] and self.config['case_definition']:
-            return True
-        return False
-
-    @property
-    def has_iterations(self):
-        """Identify whether control is iteration-configured or not."""
-        if self.config['iteration_config']:
-            return True
-        return False
 
     @property
     def rule_config(self):
@@ -625,12 +634,23 @@ class Control():
         return self.parser.parse_boolean('need_postrun_hook')
 
     @property
-    def text_error(self):
-        """Get textual error representation of current control run."""
-        errors = self._all_errors.copy()
-        texts = [''.join(tb.format_exception(*error)) for error in errors]
-        text = f'{str():->40}\n'.join(texts)
-        return text
+    def has_cases(self):
+        """Identify whether control is case-configured or not."""
+        if self.config['case_config'] and self.config['case_definition']:
+            return True
+        return False
+
+    @property
+    def has_iterations(self):
+        """Identify whether control is iteration-configured or not."""
+        if self.config['iteration_config']:
+            return True
+        return False
+
+    @property
+    def variables(self):
+        """Get control variables."""
+        return self.parser.parse_variables()
 
     def run(self):
         """Run control in an ordinary way."""
@@ -1000,7 +1020,6 @@ class Control():
             if (self.fetched_number or 0) > 0:
                 self.error_table = self.executor.analyze()
                 self.error_number = self.executor.count_errors()
-                self.error_level = (self.error_number/self.fetched_number)*100
                 self.success_number = self.fetched_number-self.error_number
                 self._update(success_number=self.success_number,
                              error_number=self.error_number,
@@ -1018,13 +1037,13 @@ class Control():
                 if self.need_a:
                     self.error_number_a = self.executor.count_errors_a()
                     if self.error_number_a is not None:
-                        self.error_level_a = (self.error_number_a/self.fetched_number_a)*100
-                        self.success_number_a = self.fetched_number_a-self.error_number_a
+                        calc_number = self.fetched_number_a-self.error_number_a
+                        self.success_number_a = calc_number
                 if self.need_b:
                     self.error_number_b = self.executor.count_errors_b()
                     if self.error_number_b is not None:
-                        self.error_level_b = (self.error_number_b/self.fetched_number_b)*100
-                        self.success_number_b = self.fetched_number_b-self.error_number_b
+                        calc_number = self.fetched_number_b-self.error_number_b
+                        self.success_number_b = calc_number
                 self._update(success_number_a=self.success_number_a,
                              success_number_b=self.success_number_b,
                              error_number_a=self.error_number_a,
@@ -1044,7 +1063,6 @@ class Control():
                 thread.join()
                 if self._pending_error is not None:
                     raise self._pending_error
-            self.error_level = (self.error_number/(self.success_number+self.error_number))*100
             self._update(success_number=self.success_number,
                          error_number=self.error_number,
                          error_level=self.error_level)
@@ -1498,7 +1516,12 @@ class Parser():
         if self.control.is_analysis:
             names.extend([fd, err])
         elif self.control.is_reconciliation:
-            names.extend([fda, fdb, comb, nfa, nfb, dup, dupa, dupb])
+            fds = [fda, fdb]
+            nfs = [nfa, nfb]
+            dups = [dup, dupa, dupb]
+            errs = [erra, errb]
+            ress = [resa, resb]
+            names.extend([*fds, comb, *nfs, *dups, *errs, *ress])
         elif self.control.is_comparison:
             names.extend([fda, fdb, md, nmd])
         elif self.control.is_report:
@@ -2149,7 +2172,7 @@ class Executor():
             List of objects reflecting tables with found issues.
         """
 
-        SQL_DIRECTORY = 'algorithms/rec/db'
+        SQL_DIRECTORY = 'algorithms/reconciliation'
 
         create_comb = utils.read_sql(f'{SQL_DIRECTORY}/create_comb_table')
         create_dup_a = utils.read_sql(f'{SQL_DIRECTORY}/create_dup_a_table')
@@ -2207,6 +2230,15 @@ class Executor():
         key_rules = ' and '.join(key_rules).lower()
         key_value = '||\'|\'||'.join(key_list).lower()
         key_partition = ', '.join(key_list).lower()
+
+        if time_shift_from == time_shift_to == 0:
+            date_rules = [date_field_a, '=', date_field_b]
+        else:
+            date_formula_from = f'{date_field_b}+({time_shift_from}/86400)'
+            date_formula_to = f'{date_field_b}+({time_shift_to}/86400)'
+            date_rules = [date_field_a, 'between',
+                          date_formula_from, 'and', date_formula_to]
+        date_rules = ' '.join(date_rules)
 
         discrepancy_fields_a = []
         discrepancy_fields_b = []
@@ -2360,6 +2392,7 @@ class Executor():
             key_rules=key_rules,
             key_value=key_value,
             key_partition=key_partition,
+            date_rules=date_rules,
             date_field_a=date_field_a,
             date_field_b=date_field_b,
             date_field_name_a=date_field_a[2:].upper(),

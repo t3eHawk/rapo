@@ -41,7 +41,7 @@ Start with install using _pip_:
 pip install rapo
 ```
 
-1. Deploy the database schema using the [scripts](db/oracle.sql).
+1. Deploy the database schema using the [scripts](schema/oracle.sql).
 
 1. Prepare the configuration file _rapo.ini_ according to the documentation.
 

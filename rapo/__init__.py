@@ -1,7 +1,7 @@
 """Python Revenue Assurance Process Optimizer."""
 
-from .main.scheduler import Scheduler
-from .main.control import Control
+from .core.scheduler import Scheduler
+from .core.control import Control
 from .web import Server
 
 

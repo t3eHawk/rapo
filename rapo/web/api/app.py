@@ -10,7 +10,7 @@ from .response import OK
 from ...logger import logger
 from ...reader import reader
 
-from ...main.control import Control
+from ...core.control import Control
 
 
 app = flask.Flask(__name__)

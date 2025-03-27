@@ -21,7 +21,7 @@ from ..config import config
 from ..logger import logger
 from ..reader import reader
 
-from ..main.control import Control
+from ..core.control import Control
 
 
 class Scheduler():

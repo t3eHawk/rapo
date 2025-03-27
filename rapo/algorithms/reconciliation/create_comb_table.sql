@@ -56,6 +56,6 @@ select {parallelism}
                          86400*({date_field_a}-{date_field_b}) as discrepancy_time_value
                     from rapo_temp_fda_{process_id} a join rapo_temp_fdb_{process_id} b
                          on {key_rules}
-                         and {date_field_a} between {date_field_b}+({time_shift_from}/86400) and {date_field_b}+({time_shift_to}/86400)
+                         and {date_rules}
                 )
        )

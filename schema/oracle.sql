@@ -11,6 +11,7 @@ create table rapo_ref_types (
 insert into rapo_ref_types values ('ANL', 'Analysis');
 insert into rapo_ref_types values ('REC', 'Reconciliation');
 insert into rapo_ref_types values ('CMP', 'Comparison');
+insert into rapo_ref_types values ('DUP', 'Duplication');
 insert into rapo_ref_types values ('REP', 'Report');
 insert into rapo_ref_types values ('KPI', 'Key Performance Indicator');
 commit;

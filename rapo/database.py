@@ -268,6 +268,51 @@ class Database():
         query = f'truncate table {table_name}'
         self.execute(query)
 
+    def get_table_type(self, table_name):
+        """Get the table type by name.
+
+        Parameters
+        ----------
+        table_name : str
+            Name of the database table to be checked.
+        """
+        table_name = table_name.upper()
+        query = ('select object_type from user_objects '
+                 f'where object_name = \'{table_name}\' '
+                 'and object_type in (\'TABLE\', \'VIEW\')')
+        table_type = self.execute(query).scalar()
+        return table_type
+
+    def is_table(self, table):
+        """Check if the given object is a table.
+
+        Parameters
+        ----------
+        table : str or Table
+            Object to be checked.
+        """
+        table_name = table if isinstance(table, str) else table.name
+        if self.get_table_type(table_name) == 'TABLE':
+            return True
+        return False
+
+    def is_view(self, table):
+        """Check if the given object is a view.
+
+        Parameters
+        ----------
+        table : str or Table
+            Object to be checked.
+        """
+        table_name = table if isinstance(table, str) else table.name
+        if self.get_table_type(table_name) == 'VIEW':
+            return True
+        return False
+
+    def get_rowid(self, field_name):
+        """Get rowid column named by alias."""
+        return sa.literal_column('rowid').label(field_name)
+
     def format(self, statement):
         """Format given SQL statement through the formatter.
 

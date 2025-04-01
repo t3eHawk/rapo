@@ -368,8 +368,8 @@ class Control():
         if self.start_date and self.end_date:
             return (self.end_date-self.start_date).seconds
         elif self.start_date:
-        current_date = dt.datetime.now()
-        return (current_date-self.start_date).seconds
+            current_date = dt.datetime.now()
+            return (current_date-self.start_date).seconds
         else:
             return 0
 
@@ -1368,7 +1368,9 @@ class Parser():
         table = self.control.source_table_a
         where = self.control.source_filter_a
         date_field = self.control.source_date_field_a
-        select = self._parse_select(table, where=where, date_field=date_field)
+        key_field = self.control.source_key_field_a
+        select = self._parse_select(table, where=where, date_field=date_field,
+                                    key_field=key_field, need_key_field=True)
         return select
 
     def parse_select_b(self):
@@ -1381,13 +1383,21 @@ class Parser():
         table = self.control.source_table_b
         where = self.control.source_filter_b
         date_field = self.control.source_date_field_b
-        select = self._parse_select(table, where=where, date_field=date_field)
+        key_field = self.control.source_key_field_b
+        select = self._parse_select(table, where=where, date_field=date_field,
+                                    key_field=key_field, need_key_field=True)
         return select
 
-    def _parse_select(self, table, literals=None, where=None, date_field=None):
+    def _parse_select(self, table, literals=None, where=None, date_field=None,
+                      key_field=None, need_key_field=False):
         logger.debug(f'{self.c} Parsing {table} select...')
+        columns = [*table.columns]
+        if db.is_table(table):
+            if key_field and need_key_field:
+                key_column = db.get_rowid(key_field)
+                columns.append(key_column)
         literals = literals if isinstance(literals, list) else []
-        select = sa.select([*table.columns, *literals])
+        select = sa.select([*columns, *literals])
         if isinstance(where, str):
             clause = sa.text(where)
             select = select.where(clause)
@@ -2910,11 +2920,15 @@ class Executor():
             if table_name.startswith('rapo_resa'):
                 chosen_columns.extend(self.control.output_columns_a)
                 if not chosen_columns:
-                    output_columns.extend(self.control.source_table_a.columns)
+                    if db.is_table(self.control.source_table_a):
+                        key_column = db.get_rowid(self.c.source_key_field_a)
+                        output_columns.append(key_column)
             elif table_name.startswith('rapo_resb'):
                 chosen_columns.extend(self.control.output_columns_b)
                 if not chosen_columns:
-                    output_columns.extend(self.control.source_table_b.columns)
+                    if db.is_table(self.control.source_table_b):
+                        key_column = db.get_rowid(self.c.source_key_field_b)
+                        output_columns.append(key_column)
         mandatory_columns = self.control.mandatory_columns
         process_id = self.control.key_column
 

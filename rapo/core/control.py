@@ -365,10 +365,13 @@ class Control():
     @property
     def duration(self):
         """Get control duration."""
-        if self.end_date:
+        if self.start_date and self.end_date:
             return (self.end_date-self.start_date).seconds
+        elif self.start_date:
         current_date = dt.datetime.now()
         return (current_date-self.start_date).seconds
+        else:
+            return 0
 
     @property
     def initiated(self):

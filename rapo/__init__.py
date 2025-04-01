@@ -6,11 +6,11 @@ from .web import Server
 
 
 __author__ = 'Timur Faradzhov'
-__copyright__ = 'Copyright 2024, The Rapo project'
+__copyright__ = 'Copyright 2025, The Rapo project'
 __credits__ = ['Timur Faradzhov', 'Kostadin Taneski']
 
 __license__ = 'MIT'
-__version__ = '0.6.2'
+__version__ = '0.6.3'
 __maintainer__ = 'Timur Faradzhov'
 __email__ = 'timurfaradzhov@gmail.com'
 __status__ = 'Development'

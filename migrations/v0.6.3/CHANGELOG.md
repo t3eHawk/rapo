@@ -1,4 +1,4 @@
-# Rapo v0.6.2 Change Log
+# Rapo v0.6.3 Change Log
 
 ## Annotatio
 This is a new release with a lot of new features, bug fixes and improvements.
@@ -290,4 +290,4 @@ See the API documentation for the following requests:
 
 
 ---
-See commits of this release [here](https://github.com/t3eHawk/rapo/compare/v0.5.1...v0.6.2).
+See commits of this release [here](https://github.com/t3eHawk/rapo/compare/v0.5.1...v0.6.3).

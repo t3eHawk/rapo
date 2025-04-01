@@ -17,3 +17,7 @@ select {parallelism} ab.*
  where ab.total_match_number_a != ab.total_match_number_b
    and ab.time_shift_rank_a = 1 and ab.time_shift_rank_b = 1
    and ab.discrepancy_rank = 1
+   and (
+         (ab.match_position_a between 1 and ab.total_match_number_b-ab.total_match_number_a and ab.total_match_number_a < ab.total_match_number_b) or
+         (ab.match_position_b between 1 and ab.total_match_number_a-ab.total_match_number_b and ab.total_match_number_b < ab.total_match_number_a)
+       )

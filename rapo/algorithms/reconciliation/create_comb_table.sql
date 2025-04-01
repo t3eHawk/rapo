@@ -13,6 +13,8 @@ select {parallelism}
        discrepancy_time_a,
        discrepancy_time_b,
        discrepancy_time_value,
+       row_number() over (partition by key_value, time_shift_group_number, b_id order by discrepancy_pos_b, time_shift_rank_b) as match_position_a,
+       row_number() over (partition by key_value, time_shift_group_number, a_id order by discrepancy_pos_a, time_shift_rank_a) as match_position_b,
        count(distinct b_id) over (partition by key_value, time_shift_group_number) as total_match_number_a,
        count(distinct a_id) over (partition by key_value, time_shift_group_number) as total_match_number_b
   from (

@@ -1,4 +1,4 @@
-# Rapo v0.6.3 Change Log
+# Rapo v0.6.4 Change Log
 
 ## Annotatio
 This is a new release with a lot of new features, bug fixes and improvements.
@@ -7,8 +7,13 @@ This is a new release with a lot of new features, bug fixes and improvements.
 1. **Parallelism** as a new parameter of controls provides the ability to choose the number of processes that execute control queries in the database. Remember that this parameter should not be specified thoughtlessly as it significantly affects the wear and tear of database resources. It is not recommended to set a value higher than 4.
 1. **Time Windows** expands the capabilities of selecting data in controls over a specific time interval. Now data in control can be collected for any number of time periods, whether it is a day, week or month.
 1. **Timeout** as a new parameter allows you to set a time limit within which control can be executed and after which it will be canceled with status C. Currently, this is supported only for control runs via API or the `launch()` method, but not through the scheduler or basic interface, i.e. the `run()` method.
+1. **Instance Limit** as a new parameter allows you to control the number of instances of the same control running simultaneously. Currently, it is only supported when running control through the `launch()` method.
+1. **Output Limit** as a new parameter, allows you to set a limit on the number of records stored in control result tables. Currently, it only works for reconsolidations.
 1. **Iterations** allows the same control to be executed with different settings. Currently, only **Time Windows** control parameters are supported.
 1. The new control parameter **Completion SQL** allows to perform an action upon control completion, similar to **Preparation SQL**.
+1. Now a field with the `TIMESTAMP` type can be specified as the date field for control. Important: during control execution, the field will be converted to the `DATE` type and stored in this form in the control result tables.
+1. New parameters have been added that contain the names of fields with unique keys for data sources. If the source is a simple *table*, the table's `ROWID` is automatically used as the key, and the specified name is used as the alias in the control result table. If the source is a *view*, the field with the specified name must contain a pre-prepared unique key.
+1. New parameters have been added that contain the types of data sources in the control for additional grouping.
 1. Control subtypes are no longer relevant and have been removed from control properties and system structure.
 1. New built-in case types have been added: Success, Loss, Duplicate.
 1. The interface name to work with API and GUI has been simplified.
@@ -32,8 +37,8 @@ In the `RAPO_CONFIG` table, new fields have been added:
 | `period_type`        | String       | D             | Type of time interval in the control sample: D (day), M (month), W (week). |
 | `iteration_config`   | JSON         |               | Table of settings for control iterations. |
 | `timeout`            | Number       |               | Control execution time limit.               |
-| `instance_limit`     | Number       | 1             | Future functionality. Limiting the number of instances of the same control running simultaneously. |
-| `output_limit`       | Number       |               | Future functionality. Limiting the number of records saved in control result tables. |
+| `instance_limit`     | Number       | 1             | Limiting the number of instances of the same control running simultaneously. |
+| `output_limit`       | Number       |               | Limiting the number of records saved in control result tables. |
 | `parallelism`        | Number       | 4             | Number of parallel processes executing database queries. |
 
 In the `RAPO_CONFIG` table, fields have been renamed:
@@ -60,6 +65,36 @@ In the `RAPO_LOG` table, fields have been renamed:
 
 * The `RAPO_REF_CASES` directory has been added with records: Success, Loss, Duplicate.
 * The `RAPO_REF_SUBTYPES` directory has been removed.
+
+**Reconciliations** can have up to two result tables (depending on the settings) with different prefixes in the name, A and B.
+For instance, queries to the tables of the control named `TEST_CONTROL_123` will look as follows:
+```sql
+select * from rapo_resa_test_control_123;
+select * from rapo_resb_test_control_123;
+```
+In these tables, in addition to the data source fields, a set of mandatory fields is populated.
+<table>
+  <tr>
+    <th>Field Name</th>
+    <th>Description</th>
+  </tr>
+  <tr>
+    <td>RAPO_RESULT_TYPE</td>
+    <td>The type of case determined by the control for this record. Possible options: Loss, Duplicate, Discrepancy, as well as Success, if the control was configured to save reconsolidated records.</td>
+  </tr>
+  <tr>
+    <td>RAPO_DISCREPANCY_ID</td>
+    <td>Reference to the matched record from the opposite source, identified by the control as a record with a discrepancy in some factor. Populated only if result type is Discrepancy.</td>
+  </tr>
+  <tr>
+    <td>RAPO_DISCREPANCY_DESCRIPTION</td>
+    <td>Enumeration of factors for which discrepancies were identified in the control, with the discrepancy delta indicated in parentheses. Populated only if result type is Discrepancy.</td>
+  </tr>
+  <tr>
+    <td>RAPO_PROCESS_ID</td>
+    <td>Default reference on Rapo process ID that created this record.</td>
+  </tr>
+</table>
 
 ### Configuration
 #### Rule Configuration
@@ -290,4 +325,4 @@ See the API documentation for the following requests:
 
 
 ---
-See commits of this release [here](https://github.com/t3eHawk/rapo/compare/v0.5.1...v0.6.3).
+See commits of this release [here](https://github.com/t3eHawk/rapo/compare/v0.5.1...v0.6.4).

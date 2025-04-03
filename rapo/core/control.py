@@ -2908,11 +2908,7 @@ class Executor():
     def _prepare_output_columns(self, table_name):
         output_columns = []
         chosen_columns = []
-        if (
-            self.control.is_analysis
-            or self.control.is_comparison
-            or self.control.is_report
-        ):
+        key_columns = []
             chosen_columns.extend(self.control.output_columns)
             if not chosen_columns:
                 output_columns.extend(self.c.source_table.columns)
@@ -2920,15 +2916,17 @@ class Executor():
             if table_name.startswith('rapo_resa'):
                 chosen_columns.extend(self.control.output_columns_a)
                 if not chosen_columns:
+                    output_columns.extend(self.control.source_table_a.columns)
                     if db.is_table(self.control.source_table_a):
                         key_column = db.get_rowid(self.c.source_key_field_a)
-                        output_columns.append(key_column)
+                        key_columns.append(key_column)
             elif table_name.startswith('rapo_resb'):
                 chosen_columns.extend(self.control.output_columns_b)
                 if not chosen_columns:
+                    output_columns.extend(self.control.source_table_b.columns)
                     if db.is_table(self.control.source_table_b):
                         key_column = db.get_rowid(self.c.source_key_field_b)
-                        output_columns.append(key_column)
+                        key_columns.append(key_column)
         mandatory_columns = self.control.mandatory_columns
         process_id = self.control.key_column
 
@@ -2952,6 +2950,7 @@ class Executor():
                 table = self.control.source_table
                 column = table.c[column_name]
             output_columns.append(column)
+        output_columns.extend(key_columns)
         for mandatory_column in mandatory_columns:
             column = mandatory_column.null
             output_columns.append(column)

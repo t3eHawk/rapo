@@ -292,9 +292,8 @@ class Database():
             Object to be checked.
         """
         table_name = table if isinstance(table, str) else table.name
-        if self.get_table_type(table_name) == 'TABLE':
-            return True
-        return False
+        table_type = self.get_table_type(table_name)
+        return True if table_type == 'TABLE' else False
 
     def is_view(self, table):
         """Check if the given object is a view.
@@ -305,9 +304,31 @@ class Database():
             Object to be checked.
         """
         table_name = table if isinstance(table, str) else table.name
-        if self.get_table_type(table_name) == 'VIEW':
-            return True
-        return False
+        table_type = self.get_table_type(table_name)
+        return True if table_type == 'VIEW' else False
+
+    def get_column_type(self, table_name, column_name):
+        table_name = table_name.upper()
+        column_name = column_name.upper()
+        query = ('select data_type from user_tab_columns '
+                 f'where table_name = \'{table_name}\' '
+                 f'and column_name = \'{column_name}\'')
+        column_type = self.execute(query).scalar()
+        return column_type
+
+    def is_date(self, table, column):
+        """Check if the given column is a DATE."""
+        table_name = table if isinstance(table, str) else table.name
+        column_name = column if isinstance(column, str) else column.name
+        column_type = self.get_column_type(table_name, column_name)
+        return True if column_type == 'DATE' else False
+
+    def is_timestamp(self, table, column):
+        """Check if the given column is a TIMESTAMP."""
+        table_name = table if isinstance(table, str) else table.name
+        column_name = column if isinstance(column, str) else column.name
+        column_type = self.get_column_type(table_name, column_name)
+        return True if column_type.startswith('TIMESTAMP') else False
 
     def get_rowid(self, field_name):
         """Get rowid column named by alias."""

@@ -364,6 +364,16 @@ class Database():
         """
         return obj.compile(bind=self.engine, compile_kwargs=self.ckwargs)
 
+    def normalize(self, columns, date_fields=[]):
+        """Normalize list of columns."""
+        normalized_columns = []
+        for column in columns:
+            if date_fields and column.name in date_fields:
+                if self.is_timestamp(column.table, column):
+                    column = sa.cast(column, sa.DATE).label(column.name)
+            normalized_columns.append(column)
+        return normalized_columns
+
     @property
     def configured(self):
         """Test database configuration."""

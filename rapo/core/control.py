@@ -1391,7 +1391,7 @@ class Parser():
     def _parse_select(self, table, literals=None, where=None, date_field=None,
                       key_field=None, need_key_field=False):
         logger.debug(f'{self.c} Parsing {table} select...')
-        columns = [*table.columns]
+        columns = db.normalize(table.columns, date_fields=[date_field])
         if db.is_table(table):
             if key_field and need_key_field:
                 key_column = db.get_rowid(key_field)
@@ -1403,6 +1403,8 @@ class Parser():
             select = select.where(clause)
         if isinstance(date_field, str):
             column = table.c[date_field]
+            if db.is_timestamp(table, column):
+                column = sa.cast(column, sa.DATE).label(date_field)
 
             date_from = self.control.date_from
             date_to = self.control.date_to
@@ -2908,10 +2910,13 @@ class Executor():
     def _prepare_output_columns(self, table_name):
         output_columns = []
         chosen_columns = []
+        date_columns = []
         key_columns = []
+        if self.control.is_analysis or self.control.is_report:
             chosen_columns.extend(self.control.output_columns)
             if not chosen_columns:
                 output_columns.extend(self.c.source_table.columns)
+            date_columns.append(self.control.source_date_field)
         elif self.control.is_reconciliation:
             if table_name.startswith('rapo_resa'):
                 chosen_columns.extend(self.control.output_columns_a)
@@ -2920,6 +2925,7 @@ class Executor():
                     if db.is_table(self.control.source_table_a):
                         key_column = db.get_rowid(self.c.source_key_field_a)
                         key_columns.append(key_column)
+                date_columns.append(self.control.source_date_field_a)
             elif table_name.startswith('rapo_resb'):
                 chosen_columns.extend(self.control.output_columns_b)
                 if not chosen_columns:
@@ -2927,6 +2933,13 @@ class Executor():
                     if db.is_table(self.control.source_table_b):
                         key_column = db.get_rowid(self.c.source_key_field_b)
                         key_columns.append(key_column)
+                date_columns.append(self.control.source_date_field_b)
+        elif self.control.is_comparison:
+            chosen_columns.extend(self.control.output_columns)
+            if not chosen_columns:
+                output_columns.extend(self.c.source_table.columns)
+            date_columns.extend([self.control.source_date_field_a,
+                                 self.control.source_date_field_b])
         mandatory_columns = self.control.mandatory_columns
         process_id = self.control.key_column
 
@@ -2956,6 +2969,7 @@ class Executor():
             output_columns.append(column)
         output_columns.append(process_id)
 
+        output_columns = db.normalize(output_columns, date_fields=date_columns)
         return output_columns
 
     def delete_output_records(self):

@@ -2838,6 +2838,7 @@ class Executor():
         need_recons_a = rule_config['need_recons_a']
         output_table = self.prepare_output_table_a()
         output_columns = output_table.columns
+        output_limit = self.control.config['output_limit']
         process_id = self.control.key_column
         input_tables = []
         if need_issues_a:
@@ -2848,6 +2849,8 @@ class Executor():
             input_tables.append(result_table)
         for input_table in input_tables:
             select = sa.select([*input_table.columns, process_id])
+            if output_limit:
+                select = select.limit(output_limit)
             insert = output_table.insert().from_select(output_columns, select)
             db.execute(insert)
         logger.debug(f'{self.c} Reconciliation output A saved')
@@ -2860,6 +2863,7 @@ class Executor():
         need_recons_b = rule_config['need_recons_b']
         output_table = self.prepare_output_table_b()
         output_columns = output_table.columns
+        output_limit = self.control.config['output_limit']
         process_id = self.control.key_column
         input_tables = []
         if need_issues_b:
@@ -2870,6 +2874,8 @@ class Executor():
             input_tables.append(result_table)
         for input_table in input_tables:
             select = sa.select([*input_table.columns, process_id])
+            if output_limit:
+                select = select.limit(output_limit)
             insert = output_table.insert().from_select(output_columns, select)
             db.execute(insert)
         logger.debug(f'{self.c} Reconciliation output B saved')

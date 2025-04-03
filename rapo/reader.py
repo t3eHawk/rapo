@@ -1,10 +1,9 @@
 """Contains application data reader."""
 
+import datetime as dt
 import sqlalchemy as sa
 
 from .database import db
-
-from datetime import datetime
 
 
 class Reader():
@@ -112,6 +111,56 @@ class Reader():
             message = f'no control with name {control_name} found'
             raise ValueError(message)
 
+    def read_control_logs(self, control_name, days=365, statuses=[]):
+        """Get control runs.
+
+        Parameters
+        ----------
+        control_name : str
+            Unique control name used to load logs.
+        days : int
+            Number of days for which logs are to be received.
+        status : list
+            List of statuses with which logs are to be retrieved.
+
+        Returns
+        -------
+        records : list
+            Ordinary list with control logs.
+        """
+        log = db.tables.log
+        config = db.tables.config
+        join = log.join(config, log.c.control_id == config.c.control_id)
+        select = sa.select(log.columns).select_from(join)\
+                   .where(config.c.control_name == control_name)
+        if isinstance(days, int):
+            dateform = 'YYYY-MM-DD HH24:MI:SS'
+            cut_off_date = dt.datetime.now()-dt.timedelta(days=days)
+            cut_off_date = cut_off_date.strftime('%Y-%m-%d %H:%M:%S')
+            cut_off_date = sa.func.to_date(cut_off_date, dateform)
+            select = select.where(log.c.start_date > cut_off_date)
+        if all(isinstance(i, str) and len(i) == 1 for i in statuses):
+            select = select.where(log.c.status.in_(statuses))
+        result = db.execute(select)
+        records = [dict(record) for record in result]
+        return records
+
+    def read_control_recent_logs(self, control_name):
+        """Get control runs.
+
+        Parameters
+        ----------
+        control_name : str
+            Unique control name used to load logs.
+
+        Returns
+        -------
+        records : list
+            Ordinary list with control logs.
+        """
+        statuses = ['I', 'S', 'P', 'F']
+        return self.read_control_logs(control_name, days=1, statuses=statuses)
+
     def read_running_controls(self):
         """Get list of running controls."""
         table = db.tables.log
@@ -122,7 +171,6 @@ class Reader():
 
     def read_control_config_all(self):
         """Get list of all controls in the config table."""
-
         config = db.tables.config
         select = config.select().order_by(config.c.updated_date.desc())
         result = db.execute(select)
@@ -216,14 +264,14 @@ class Reader():
         for k in [i for i in set(data.keys()).difference(config.columns.keys())]:
           del data[k]
 
-        data['updated_date'] = datetime.now().date()
+        data['updated_date'] = dt.datetime.now().date()
 
         if 'control_id' in data:
-            data['created_date'] = datetime.strptime(data['created_date'], '%a, %d %b %Y %H:%M:%S %Z')
+            data['created_date'] = dt.datetime.strptime(data['created_date'], '%a, %d %b %Y %H:%M:%S %Z')
             update = config.update().where(config.c.control_id == data['control_id']).values(data)
             result = db.execute(update)
         else:
-            data['created_date'] = datetime.now().date()
+            data['created_date'] = dt.datetime.now().date()
             insert = config.insert().values(data)
             result = db.execute(insert)
         return result

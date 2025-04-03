@@ -398,6 +398,15 @@ class Control():
         return False
 
     @property
+    def kept(self):
+        instance_list = reader.read_control_recent_logs(self.name)
+        instance_number = len(instance_list)
+        instance_limit = self.config['instance_limit']
+        if instance_number >= instance_limit:
+            return True
+        return False
+
+    @property
     def error_level(self):
         """Calculate control error level."""
         if self.is_analysis:
@@ -813,11 +822,15 @@ class Control():
     def _spawn(self):
         logger.debug(f'{self} Spawning new process for the control...')
         context = mp.get_context('spawn')
-        self.process = context.Process(name=self.name, target=self._resume)
+        self.process = context.Process(name=self.name, target=self._operate)
         self.process.start()
         self.handler = th.Thread(name=f'{self}-Handler', target=self._handle)
         self.handler.start()
         logger.info(f'{self} Running as process on PID {self.process.pid}')
+
+    def _operate(self):
+        self._keep()
+        self._resume()
 
     def _handle(self):
         process = self.process
@@ -835,6 +848,10 @@ class Control():
                 self._cancel()
             tm.sleep(5)
             self.__dict__.update(control.__dict__)
+
+    def _keep(self):
+        while self.kept:
+            tm.sleep(60)
 
     def _wait(self):
         process = self.process

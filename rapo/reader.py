@@ -198,6 +198,7 @@ class Reader():
                 select
                     c.control_name,
                     c.control_id,
+                    c.control_type,
                     l.process_id,
                     nvl(l.start_date, l.added) start_date,
                     l.date_from,
@@ -228,7 +229,7 @@ class Reader():
                 where 1=1
                     and c.control_name is not null
                 order by process_id desc
-                fetch first 100 rows only
+                fetch first 500 rows only
         """
 
         result = db.execute(select)
@@ -264,14 +265,14 @@ class Reader():
         for k in [i for i in set(data.keys()).difference(config.columns.keys())]:
           del data[k]
 
-        data['updated_date'] = dt.datetime.now().date()
+        data['updated_date'] = dt.datetime.now()
 
         if 'control_id' in data:
             data['created_date'] = dt.datetime.strptime(data['created_date'], '%a, %d %b %Y %H:%M:%S %Z')
             update = config.update().where(config.c.control_id == data['control_id']).values(data)
             result = db.execute(update)
         else:
-            data['created_date'] = dt.datetime.now().date()
+            data['created_date'] = dt.datetime.now()
             insert = config.insert().values(data)
             result = db.execute(insert)
         return result

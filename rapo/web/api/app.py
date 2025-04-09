@@ -152,21 +152,6 @@ def get_datasource_coluimns():
     return response
 
 
-@app.route('/api/get-datasource-date-columns')
-@auth.login_required
-def get_datasource_date_coluimns():
-    """Get list of tables in JSON."""
-    request = flask.request
-
-    if 'datasource_name' in request.args:
-        rows = reader.read_datasource_date_columns(request.args['datasource_name'])
-    else:
-        rows = []
-
-    response = flask.jsonify(rows)
-    return response
-
-
 @app.route('/api/save-control', methods=['POST', 'OPTIONS'])
 @auth.login_required
 def save_control():

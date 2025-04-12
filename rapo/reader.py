@@ -132,7 +132,8 @@ class Reader():
         config = db.tables.config
         join = log.join(config, log.c.control_id == config.c.control_id)
         select = sa.select(log.columns).select_from(join)\
-                   .where(config.c.control_name == control_name)
+                   .where(config.c.control_name == control_name)\
+                   .order_by(log.c.added.desc())
         if isinstance(days, int):
             dateform = 'YYYY-MM-DD HH24:MI:SS'
             cut_off_date = dt.datetime.now()-dt.timedelta(days=days)

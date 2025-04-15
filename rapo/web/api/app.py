@@ -135,7 +135,7 @@ def read_control_logs():
     request = flask.request
 
     if 'control_name' in request.args:
-        rows = reader.read_control_logs(request.args['control_name'], request.args['days'] if 'days' in request.args else 31, ['E', 'D', 'I', 'S', 'P', 'F', 'X'] )
+        rows = reader.read_control_logs(request.args['control_name'], int(request.args['days']) if 'days' in request.args else 31, ['C', 'E', 'D', 'I', 'S', 'P', 'F', 'X'])
     else:
         rows = []
 

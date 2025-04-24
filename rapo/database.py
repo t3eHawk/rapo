@@ -48,7 +48,12 @@ class Database():
             table = sa.Table(name, meta, autoload=True, autoload_with=engine)
             return table
 
-    class Formatter():
+        def check(self, name):
+            """Check if specified table exists by name."""
+            if self.database.engine.has_table(name):
+                return True
+            return False
+
         """Represents database query formatter."""
 
         def __init__(self, database):
@@ -157,7 +162,8 @@ class Database():
         connection = self.engine.connect()
         return connection
 
-    def execute(self, statement, output=None, tag=None):
+    def execute(self, statement, auto_commit=True, return_connection=False,
+                as_dict=False, output=None, tag=None):
         """Execute given SQL statement.
 
         Returns
@@ -171,13 +177,26 @@ class Database():
                 tag = f'{tag} ' if tag else ''
                 message = f'{tag}Running query:\n{document}'
                 output(message)
-            conn = self.connect()
-            result = conn.execute(statement)
+            connection = self.connect()
+            transaction = connection.begin()
+            result = connection.execute(statement)
+            if as_dict:
+                result = [dict(record) for record in result]
         except Exception as error:
-            conn.close()
+            try:
+                if auto_commit:
+                    transaction.rollback()
+                connection.close()
+            finally:
             raise error
         else:
-            conn.close()
+            if return_connection:
+                return result, connection, transaction
+            try:
+                if auto_commit:
+                    transaction.commit()
+                connection.close()
+            finally:
             return result
 
     def execute_many(self, *statements, result_queue=None, **kwargs):
@@ -235,6 +254,10 @@ class Database():
         table = sa.Table(name, meta, autoload=True, autoload_with=self.engine)
         return table
 
+    def exists(self, table_name):
+        """Check if the specified table exists by name."""
+        return self.tables.check(table_name)
+
     def drop(self, table_name):
         """Delete database table by name.
 
@@ -243,6 +266,10 @@ class Database():
         table_name : str
             Name of the database table to be dropped.
         """
+        if self.is_table(table_name):
+            if self.is_materialized_view(table_name):
+                query = f'drop materialized view {table_name}'
+            else:
         query = f'drop table {table_name}'
         self.execute(query)
 
@@ -254,6 +281,10 @@ class Database():
         table_name : str
             Name of the database table to be dropped.
         """
+        if self.is_table(table_name):
+            if self.is_materialized_view(table_name):
+                query = f'drop materialized view {table_name}'
+            else:
         query = f'drop table {table_name} purge'
         self.execute(query)
 
@@ -283,6 +314,21 @@ class Database():
         table_type = self.execute(query).scalar()
         return table_type
 
+    def get_view_type(self, view_name):
+        """Get the view type by name.
+
+        Parameters
+        ----------
+        table_name : str
+            Name of the database table to be checked.
+        """
+        view_name = view_name.upper()
+        query = ('select object_type from user_objects '
+                 f'where object_name = \'{view_name}\' '
+                 'and object_type in (\'VIEW\', \'MATERIALIZED VIEW\')')
+        view_type = self.execute(query).scalar()
+        return view_type
+
     def is_table(self, table):
         """Check if the given object is a table.
 
@@ -306,6 +352,18 @@ class Database():
         table_name = table if isinstance(table, str) else table.name
         table_type = self.get_table_type(table_name)
         return True if table_type == 'VIEW' else False
+
+    def is_materialized_view(self, view):
+        """Check if the given object is a materialized view.
+
+        Parameters
+        ----------
+        table : str or Table
+            Object to be checked.
+        """
+        view_name = view if isinstance(view, str) else view.name
+        view_type = self.get_view_type(view_name)
+        return True if view_type == 'MATERIALIZED VIEW' else False
 
     def get_column_type(self, table_name, column_name):
         table_name = table_name.upper()

@@ -1974,9 +1974,9 @@ class Parser():
             columns = []
             for value in config.get('columns', []):
                 new = column.copy()
-                if isinstance(value, str) is True:
+                if isinstance(value, str):
                     new['column'] = value.lower()
-                if isinstance(value, dict) is True:
+                if isinstance(value, dict):
                     for key in new.keys():
                         raw = value.get(key)
                         if isinstance(raw, str):
@@ -3088,8 +3088,12 @@ class Executor():
                     column = table_b.c[column_b]
                 column = column.label(column_name) if column_name else column
             else:
-                table = self.control.source_table
-                column = table.c[column_name]
+                if table_name.startswith('rapo_rest'):
+                    column = self.control.source_table.c[column_name]
+                elif table_name.startswith('rapo_resa'):
+                    column = self.control.source_table_a.c[column_name]
+                elif table_name.startswith('rapo_resb'):
+                    column = self.control.source_table_b.c[column_name]
             output_columns.append(column)
         output_columns.extend(key_columns)
         for mandatory_column in mandatory_columns:

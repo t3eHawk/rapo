@@ -96,6 +96,7 @@ select {parallelism}
                                       from rapo_temp_source_a_{process_id} a join rapo_temp_source_b_{process_id} b
                                            on {key_rules}
                                            and {date_rules}
+                                    {fetch_limit_expression}
                                   )
                          )
                 )

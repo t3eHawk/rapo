@@ -1773,6 +1773,7 @@ class Parser():
         time_shift_to = input_config.get('time_shift_to', 0)
         time_tolerance_from = input_config.get('time_tolerance_from', 0)
         time_tolerance_to = input_config.get('time_tolerance_to', 0)
+        correlation_limit = input_config.get('correlation_limit', False)
         correlation_config = []
         for item_config in input_config.get('correlation_config', {}):
             field_a = item_config['field_a'].lower()
@@ -1809,6 +1810,7 @@ class Parser():
             'time_shift_to': time_shift_to,
             'time_tolerance_from': time_tolerance_from,
             'time_tolerance_to': time_tolerance_to,
+            'correlation_limit': correlation_limit,
             'correlation_config': correlation_config,
             'discrepancy_config': discrepancy_config
         }
@@ -2305,6 +2307,7 @@ class Executor():
         need_recons_a = rule_config['need_recons_a']
         need_recons_b = rule_config['need_recons_b']
         allow_duplicates = rule_config['allow_duplicates']
+        correlation_limit = rule_config.get('correlation_limit')
 
         key_fields_a = []
         key_fields_b = []
@@ -2450,6 +2453,18 @@ class Executor():
         target_error_types_b = [f'\'{et}\'' for et in target_error_types_b]
         target_error_types_b = ', '.join(target_error_types_b)
 
+        fetch_limit, fetch_limit_expression = 0, ''
+        if correlation_limit:
+            if isinstance(correlation_limit, bool) and correlation_limit:
+                multiplier = 2.5
+                fetch_number = max(self.control.fetched_number_a,
+                                   self.control.fetched_number_b)
+                fetch_limit = int(fetch_number*multiplier)
+            elif isinstance(correlation_limit, int) and correlation_limit > 0:
+                fetch_limit = correlation_limit
+        if fetch_limit:
+            fetch_limit_expression = f'where rownum <= {fetch_limit}'
+
         correlate = correlate.format(
             process_id=self.control.process_id,
             parallelism=parallelism,
@@ -2467,9 +2482,8 @@ class Executor():
             discrepancy_rules=discrepancy_rules,
             discrepancy_fields=discrepancy_fields,
             discrepancy_formulas=discrepancy_formulas,
-            discrepancy_sums=discrepancy_sums
-        )
-        create_dup_a = create_dup_a.format(
+            discrepancy_sums=discrepancy_sums,
+            fetch_limit_expression=fetch_limit_expression
         )
         organize_a = organize_a.format(
             process_id=self.control.process_id,

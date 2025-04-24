@@ -168,7 +168,8 @@ class Control():
     """
 
     def __init__(self, name=None, timestamp=None, process_id=None,
-                 iteration_id=None, date=None, date_from=None, date_to=None):
+                 iteration_id=None, date=None, date_from=None, date_to=None,
+                 debug_mode=False):
         self.name = name or reader.read_control_name(process_id)
         self.config = reader.read_control_config(self.name)
         self.result = reader.read_control_result(process_id)
@@ -176,6 +177,7 @@ class Control():
         self.group = self.config['control_group']
         self.type = self.config['control_type']
         self.engine = self.config['control_engine']
+        self.debug_mode = debug_mode
 
         self.parser = Parser(self)
         self.executor = Executor(self)
@@ -552,12 +554,12 @@ class Control():
     @property
     def temporary_names(self):
         """Get temporary table names."""
-        return self.parser.parse_temp_names()
+        return self.parser.parse_temporary_names()
 
     @property
-    def temp_tables(self):
+    def temporary_tables(self):
         """Get temporary tables."""
-        return self.parser.parse_temp_tables()
+        return self.parser.parse_temporary_tables()
 
     @property
     def rule_config(self):
@@ -923,8 +925,8 @@ class Control():
         logger.info(f'{self} Finishing control...')
         try:
             self.status = 'F'
-            self._update(status=self.status)
-            self.executor.drop_temporary_tables()
+            if not self.debug_mode:
+                self.executor.delete_temporary_tables()
         except Exception:
             logger.error()
             return self._escape()
@@ -951,9 +953,7 @@ class Control():
     def _cancel(self):
         logger.info(f'{self} Canceling control...')
         try:
-            self.status = 'C'
-            self._update(status=self.status)
-            self.executor.drop_temporary_tables()
+            self.executor.delete_temporary_tables()
             self.executor.delete_output_records()
         except Exception:
             logger.error()
@@ -1545,9 +1545,8 @@ class Parser():
         return tables
 
     def _parse_table(self, table_name):
-        if db.engine.has_table(table_name):
-            table = db.table(table_name)
-            return table
+        if db.exists(table_name):
+            return db.table(table_name)
 
     def parse_output_names(self):
         """Get list with necessary output table names.
@@ -1577,12 +1576,12 @@ class Parser():
         """
         tables = []
         for name in self.control.output_names:
-            if db.engine.has_table(name):
+            if db.exists(name):
                 table = db.table(name)
                 tables.append(table)
         return tables
 
-    def parse_temp_names(self):
+    def parse_temporary_names(self):
         """Get list with necessary temporary table names.
 
         Returns
@@ -1623,7 +1622,7 @@ class Parser():
             names.append(src)
         return names
 
-    def parse_temp_tables(self):
+    def parse_temporary_tables(self):
         """Get list with existing temporary tables.
 
         Returns
@@ -1632,8 +1631,8 @@ class Parser():
             List of sqlalchemy.Table objects.
         """
         tables = []
-        for name in self.control.temp_names:
-            if db.engine.has_table(name):
+        for name in self.control.temporary_names:
+            if db.exists(name):
                 table = db.table(name)
                 tables.append(table)
         return tables
@@ -3010,10 +3009,10 @@ class Executor():
         if self.control.with_deletion or self.control.with_drop:
             if db.engine.has_table(table_name):
                 if self.control.with_deletion:
-                    db.truncate(table_name)
+                self._clean_output_table(table_name)
                 elif self.control.with_drop:
-                    db.drop(table_name)
-        if not db.engine.has_table(table_name):
+                self._delete_output_table(table_name)
+        if not db.exists(table_name):
             logger.debug(f'{self.c} Table {table_name} will be created')
 
             columns = self._prepare_output_columns(table_name)
@@ -3104,22 +3103,73 @@ class Executor():
         output_columns = db.normalize(output_columns, date_fields=date_columns)
         return output_columns
 
+    def delete_output_table(self):
+        """Delete control output table."""
+        self._delete_output_table(self.control.output_name)
+
+    def delete_output_table_a(self):
+        """Delete control output table A."""
+        self._delete_output_table(self.control.output_name_a)
+
+    def delete_output_table_b(self):
+        """Delete control output table B."""
+        self._delete_output_table(self.control.output_name_b)
+
+    def delete_output_tables(self):
+        """Delete all control output tables."""
+        for table_name in self.control.output_names:
+            self._delete_output_table(table_name)
+
+    def _delete_output_table(self, table_name):
+        if db.exists(table_name):
+            db.drop(table_name)
+
     def delete_output_records(self):
-        """Delete records saved as control results in DB table."""
+        """Delete records saved as control results in output tables."""
         for table in self.control.output_tables:
+            self._delete_output_records(table)
+
+    def _delete_output_records(self, table):
+        if db.exists(table.name):
             if self.control.with_deletion:
-                db.truncate(table)
+                db.truncate(table.name)
             else:
                 id = table.c.rapo_process_id
                 delete = table.delete().where(id == self.control.process_id)
                 db.execute(delete)
 
-    def drop_temporary_tables(self):
-        """Clean all temporary tables created during control execution."""
-        logger.debug(f'{self.c} Dropping temporary tables...')
-        for table in self.control.temp_tables:
-            db.purge(table.name)
-        logger.debug(f'{self.c} Temporary tables dropped')
+    def clean_output_table(self):
+        """Delete data in control output table."""
+        self._clean_output_table(self.control.output_name)
+
+    def clean_output_table_a(self):
+        """Delete data in control output table A."""
+        self._clean_output_table(self.control.output_name_a)
+
+    def clean_output_table_b(self):
+        """Delete data in control output table B."""
+        self._clean_output_table(self.control.output_name_b)
+
+    def clean_output_tables(self):
+        """Delete all data in all control output tables."""
+        for table_name in self.control.output_names:
+            self._clean_output_table(table_name)
+
+    def _clean_output_table(self, table_name):
+        if db.exists(table_name):
+            db.truncate(table_name)
+
+    def delete_temporary_tables(self):
+        """Delete all temporary tables created during control execution."""
+        logger.debug(f'{self.c} Deleting temporary tables...')
+        for table_name in self.control.temporary_names:
+            self._delete_temporary_table(table_name)
+        logger.debug(f'{self.c} Temporary tables deleted')
+
+    def _delete_temporary_table(self, table_name):
+        if db.exists(table_name):
+            db.purge(table_name)
+
 
     def prerun_hook(self):
         """Execute database prerun hook function."""

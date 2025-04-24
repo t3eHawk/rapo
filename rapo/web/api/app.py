@@ -57,8 +57,10 @@ def run_control():
     date = request.args.get('date')
     date_from = request.args.get('date_from')
     date_to = request.args.get('date_to')
+    debug_mode = request.args.get('debug_mode')
     if request.method == 'POST':
-        control = Control(name, date_from=date_from, date_to=date_to, date=date)
+        control = Control(name, date_from=date_from, date_to=date_to,
+                          date=date, debug_mode=debug_mode)
         control.launch()
     response = flask.jsonify(status=200)
     return response
@@ -84,6 +86,30 @@ def revoke_control_run():
     control = Control(process_id=process_id)
     control.revoke()
     return OK
+
+
+@app.route('/api/delete-control-output-tables', methods=['DELETE'])
+@auth.login_required
+def delete_control_output_tables():
+    """Run control and get its result in JSON."""
+    request = flask.request
+    name = request.args['name']
+    control = Control(name)
+    control.executor.delete_output_tables()
+    response = flask.jsonify(status=200)
+    return response
+
+
+@app.route('/api/delete-control-temporary-tables', methods=['DELETE'])
+@auth.login_required
+def delete_control_temporary_tables():
+    """Run control and get its result in JSON."""
+    request = flask.request
+    process_id = int(request.args['id'])
+    control = Control(process_id=process_id)
+    control.executor.delete_temporary_tables()
+    response = flask.jsonify(status=200)
+    return response
 
 
 @app.route('/api/get-running-controls')
@@ -157,12 +183,11 @@ def get_datasource_coluimns():
 def get_datasource_date_coluimns():
     """Get list of tables in JSON."""
     request = flask.request
-
     if 'datasource_name' in request.args:
-        rows = reader.read_datasource_date_columns(request.args['datasource_name'])
+        datasource_name = request.args['datasource_name']
+        rows = reader.read_datasource_date_columns(datasource_name)
     else:
         rows = []
-
     response = flask.jsonify(rows)
     return response
 
@@ -170,7 +195,7 @@ def get_datasource_date_coluimns():
 @app.route('/api/save-control', methods=['POST', 'OPTIONS'])
 @auth.login_required
 def save_control():
-    """Create or update control to config table."""
+    """Create or update control in configuration table."""
     request = flask.request
 
     if request.method == 'POST':
@@ -178,7 +203,7 @@ def save_control():
             data = request.get_json()
             reader.save_control(data)
             response = flask.jsonify(status=200)
-        except:
+        except Exception:
             response = flask.jsonify(status=400)
     else:
         response = flask.jsonify([])
@@ -189,7 +214,7 @@ def save_control():
 @app.route('/api/delete-control', methods=['DELETE', 'OPTIONS'])
 @auth.login_required
 def delete_control():
-    """Save control to config table."""
+    """Delete control from configuration table."""
     request = flask.request
     control_id = int(request.args['control_id'])
 

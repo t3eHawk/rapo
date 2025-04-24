@@ -1405,8 +1405,15 @@ class Parser():
         where = self.control.source_filter_a
         date_field = self.control.source_date_field_a
         key_field = self.control.source_key_field_a
-        select = self._parse_select(table, where=where, date_field=date_field,
-                                    key_field=key_field, need_key_field=True)
+        shift_from_sec, shift_to_sec = self._parse_time_shift_delta()
+        not_null_fields = self._parse_not_null_fields_a()
+        select = self._parse_select(table, where=where,
+                                    not_null_fields=not_null_fields,
+                                    date_field=date_field,
+                                    key_field=key_field,
+                                    need_key_field=True,
+                                    shift_from_sec=shift_from_sec,
+                                    shift_to_sec=shift_to_sec)
         return select
 
     def parse_select_b(self):
@@ -1420,12 +1427,21 @@ class Parser():
         where = self.control.source_filter_b
         date_field = self.control.source_date_field_b
         key_field = self.control.source_key_field_b
-        select = self._parse_select(table, where=where, date_field=date_field,
-                                    key_field=key_field, need_key_field=True)
+        shift_from_sec, shift_to_sec = self._parse_time_shift_delta()
+        not_null_fields = self._parse_not_null_fields_b()
+        select = self._parse_select(table, where=where,
+                                    not_null_fields=not_null_fields,
+                                    date_field=date_field,
+                                    key_field=key_field,
+                                    need_key_field=True,
+                                    shift_from_sec=shift_from_sec,
+                                    shift_to_sec=shift_to_sec)
         return select
 
-    def _parse_select(self, table, literals=None, where=None, date_field=None,
-                      key_field=None, need_key_field=False):
+    def _parse_select(self, table, literals=None, where=None,
+                      not_null_fields=None, date_field=None,
+                      key_field=None, need_key_field=False,
+                      shift_from_sec=0, shift_to_sec=0):
         logger.debug(f'{self.c} Parsing {table} select...')
         columns = db.normalize(table.columns, date_fields=[date_field])
         if db.is_table(table):
@@ -1434,21 +1450,24 @@ class Parser():
                 columns.append(key_column)
         literals = literals if isinstance(literals, list) else []
         select = sa.select([*columns, *literals])
-        if isinstance(where, str):
-            clause = sa.text(where)
-            select = select.where(clause)
-        if isinstance(date_field, str):
-            column = table.c[date_field]
+        if where and isinstance(where, str):
+            select = select.where(sa.text(where))
+        if not_null_fields and isinstance(not_null_fields, list):
+            for not_null_field in not_null_fields:
+                column = table.columns[not_null_field]
+                select = select.where(column.is_not(None))
+        if date_field and isinstance(date_field, str):
+            column = table.columns[date_field]
             if db.is_timestamp(table, column):
                 column = sa.cast(column, sa.DATE).label(date_field)
 
             date_from = self.control.date_from
             date_to = self.control.date_to
-            if self.control.is_reconciliation:
-                time_shift_from = self.control.rule_config['time_shift_from']
-                time_shift_to = self.control.rule_config['time_shift_to']
-                date_from = date_from+dt.timedelta(seconds=time_shift_from)
-                date_to = date_to+dt.timedelta(seconds=time_shift_to)
+            if shift_from_sec or shift_to_sec:
+                if shift_from_sec:
+                    date_from = date_from+dt.timedelta(seconds=shift_from_sec)
+                if shift_to_sec:
+                    date_to = date_to+dt.timedelta(seconds=shift_to_sec)
 
             datefmt = '%Y-%m-%d %H:%M:%S'
             date_from = date_from.strftime(datefmt)
@@ -1480,9 +1499,30 @@ class Parser():
     def _parse_filter(self, filter_name):
         return self.control.config[filter_name]
 
-    def parse_error_tables(self):
-        """Get control run error tables."""
+    def _parse_time_shift_delta(self):
         if self.control.is_reconciliation:
+            shift_from_sec = self.control.rule_config['time_shift_from']
+            shift_to_sec = self.control.rule_config['time_shift_to']
+            return shift_from_sec, shift_to_sec
+
+    def _parse_not_null_fields_a(self):
+        not_full_fields = []
+        for case in self.control.rule_config['correlation_config']:
+            field_a = case['field_a']
+            allow_null = case['allow_null']
+            if not allow_null:
+                not_full_fields.append(field_a)
+        return not_full_fields
+
+    def _parse_not_null_fields_b(self):
+        not_full_fields = []
+        for case in self.control.rule_config['correlation_config']:
+            field_b = case['field_b']
+            allow_null = case['allow_null']
+            if not allow_null:
+                not_full_fields.append(field_b)
+        return not_full_fields
+
     def parse_stage_tables(self):
         """Get control run stage tables."""
         if self.control.is_reconciliation:

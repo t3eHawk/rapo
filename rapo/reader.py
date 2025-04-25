@@ -6,7 +6,7 @@ import sqlalchemy as sa
 from .database import db
 
 
-class Reader():
+class Reader:
     """Represents application data reader.
 
     Reader used to extract aplication data from database to user.
@@ -111,8 +111,9 @@ class Reader():
             message = f'no control with name {control_name} found'
             raise ValueError(message)
 
-    def read_control_logs(self, control_name, days=365, statuses=[]):
-        """Get control runs.
+    def read_control_logs(self, control_name, days=365, statuses=[],
+                          order_by=True):
+        """Retrieve control run logs with given parameters.
 
         Parameters
         ----------
@@ -122,6 +123,8 @@ class Reader():
             Number of days for which logs are to be received.
         status : list
             List of statuses with which logs are to be retrieved.
+        order_by : bool
+            Whether to sort logs by process_id.
 
         Returns
         -------
@@ -132,22 +135,23 @@ class Reader():
         config = db.tables.config
         join = log.join(config, log.c.control_id == config.c.control_id)
         select = sa.select(log.columns).select_from(join)\
-                   .where(config.c.control_name == control_name)\
-                   .order_by(log.c.added.desc())
-        if isinstance(days, int):
+                   .where(config.c.control_name == control_name)
+        if days and isinstance(days, int):
             dateform = 'YYYY-MM-DD HH24:MI:SS'
             cut_off_date = dt.datetime.now()-dt.timedelta(days=days)
             cut_off_date = cut_off_date.strftime('%Y-%m-%d %H:%M:%S')
             cut_off_date = sa.func.to_date(cut_off_date, dateform)
-            select = select.where(log.c.start_date > cut_off_date)
-        if all(isinstance(i, str) and len(i) == 1 for i in statuses):
-            select = select.where(log.c.status.in_(statuses))
-        result = db.execute(select)
-        records = [dict(record) for record in result]
-        return records
+            select = select.where(log.c.added > cut_off_date)
+        if statuses:
+            if all(isinstance(i, str) and len(i) == 1 for i in statuses):
+                select = select.where(log.c.status.in_(statuses))
+        if order_by:
+            select = select.order_by(log.c.process_id.desc())
+        result = db.execute(select, as_dict=True)
+        return result
 
     def read_control_recent_logs(self, control_name):
-        """Get control runs.
+        """Retrieve logs of currently working control instances.
 
         Parameters
         ----------
@@ -157,9 +161,9 @@ class Reader():
         Returns
         -------
         records : list
-            Ordinary list with control logs.
+            Ordinary list with currently running control run logs.
         """
-        statuses = ['I', 'S', 'P', 'F']
+        statuses = ['W', 'S', 'P', 'F']
         return self.read_control_logs(control_name, days=1, statuses=statuses)
 
     def read_running_controls(self):

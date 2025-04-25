@@ -24,7 +24,7 @@ from ..reader import reader
 from ..core.control import Control
 
 
-class Scheduler():
+class Scheduler:
     """Represents application scheduler.
 
     Application scheduler reads configuration from RAPO_CONFIG, schedule
@@ -398,6 +398,7 @@ class Scheduler():
             time.sleep(1)
 
     def _clean(self):
+        db.cleanup()
         config = db.tables.config
         select = config.select().order_by(config.c.control_id)
         result = db.execute(select)

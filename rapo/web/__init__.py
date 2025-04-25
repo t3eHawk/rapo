@@ -16,7 +16,7 @@ from ..database import db
 from ..reader import reader
 
 
-class Server():
+class Server:
     """Represents application server."""
 
     def __init__(self, host=None, port=None, dev=False):

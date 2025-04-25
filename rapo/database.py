@@ -13,7 +13,7 @@ import sqlparse as spa
 from .config import config
 
 
-class Database():
+class Database:
     """Represent database with application schema."""
 
     ckwargs = {'literal_binds': True}
@@ -24,7 +24,7 @@ class Database():
             self.load()
             self.formatter = self.Formatter(self)
 
-    class Tables():
+    class Tables:
         """Represents database tables."""
 
         def __init__(self, database):
@@ -34,6 +34,7 @@ class Database():
             self.log = self.load('rapo_log')
             self.scheduler = self.load('rapo_scheduler')
             self.web_api = self.load('rapo_web_api')
+            self.checkpoint = self.initiate('rapo_checkpoint')
 
         def load(self, name):
             """Load one of database table by name.
@@ -48,7 +49,42 @@ class Database():
             table = sa.Table(name, meta, autoload=True, autoload_with=engine)
             return table
 
-    class Formatter():
+        def initiate(self, name):
+            """Initiate one of databse table by name."""
+            if not self.check(name):
+                structure_name = name.replace('rapo_', '')
+                structure = self.database.structure.get(structure_name)
+                structure.create(self.database.engine)
+            return self.load(name)
+
+        def check(self, name):
+            """Check if specified table exists by name."""
+            if self.database.engine.has_table(name):
+                return True
+            return False
+
+    class Structure:
+        """Represents database tables structure."""
+
+        def __init__(self, database):
+            self.database = database
+            self.metadata = sa.MetaData()
+
+        def get(self, name):
+            """Get database table structure by its name."""
+            return getattr(self, name)
+
+        @property
+        def checkpoint(self):
+            return sa.Table(
+                'rapo_checkpoint', self.metadata,
+                sa.Column('control_id', sa.Integer, nullable=False),
+                sa.Column('process_id', sa.Integer, nullable=False),
+                sa.Column('added', sa.Date, nullable=False),
+                sa.UniqueConstraint('control_id', name='rapo_checkpoint_uq')
+            )
+
+    class Formatter:
         """Represents database query formatter."""
 
         def __init__(self, database):
@@ -144,6 +180,7 @@ class Database():
 
     def load(self):
         """Read database objects into memory."""
+        self.structure = self.Structure(self)
         self.tables = self.Tables(self)
 
     def connect(self):
@@ -157,7 +194,8 @@ class Database():
         connection = self.engine.connect()
         return connection
 
-    def execute(self, statement, output=None, tag=None):
+    def execute(self, statement, auto_commit=True, return_connection=False,
+                as_dict=False, output=None, tag=None):
         """Execute given SQL statement.
 
         Returns
@@ -171,14 +209,27 @@ class Database():
                 tag = f'{tag} ' if tag else ''
                 message = f'{tag}Running query:\n{document}'
                 output(message)
-            conn = self.connect()
-            result = conn.execute(statement)
+            connection = self.connect()
+            transaction = connection.begin()
+            result = connection.execute(statement)
+            if as_dict:
+                result = [dict(record) for record in result]
         except Exception as error:
-            conn.close()
-            raise error
+            try:
+                if auto_commit:
+                    transaction.rollback()
+                connection.close()
+            finally:
+                raise error
         else:
-            conn.close()
-            return result
+            if return_connection:
+                return result, connection, transaction
+            try:
+                if auto_commit:
+                    transaction.commit()
+                connection.close()
+            finally:
+                return result
 
     def execute_many(self, *statements, result_queue=None, **kwargs):
         """Execute given SQL statements.
@@ -235,6 +286,10 @@ class Database():
         table = sa.Table(name, meta, autoload=True, autoload_with=self.engine)
         return table
 
+    def exists(self, table_name):
+        """Check if the specified table exists by name."""
+        return self.tables.check(table_name)
+
     def drop(self, table_name):
         """Delete database table by name.
 
@@ -243,8 +298,12 @@ class Database():
         table_name : str
             Name of the database table to be dropped.
         """
-        query = f'drop table {table_name}'
-        self.execute(query)
+        if self.is_table(table_name):
+            if self.is_materialized_view(table_name):
+                query = f'drop materialized view {table_name}'
+            else:
+                query = f'drop table {table_name}'
+            self.execute(query)
 
     def purge(self, table_name):
         """Delete database table by name permanently.
@@ -254,8 +313,12 @@ class Database():
         table_name : str
             Name of the database table to be dropped.
         """
-        query = f'drop table {table_name} purge'
-        self.execute(query)
+        if self.is_table(table_name):
+            if self.is_materialized_view(table_name):
+                query = f'drop materialized view {table_name}'
+            else:
+                query = f'drop table {table_name} purge'
+            self.execute(query)
 
     def truncate(self, table_name):
         """Clean database table by name.
@@ -283,6 +346,21 @@ class Database():
         table_type = self.execute(query).scalar()
         return table_type
 
+    def get_view_type(self, view_name):
+        """Get the view type by name.
+
+        Parameters
+        ----------
+        table_name : str
+            Name of the database table to be checked.
+        """
+        view_name = view_name.upper()
+        query = ('select object_type from user_objects '
+                 f'where object_name = \'{view_name}\' '
+                 'and object_type in (\'VIEW\', \'MATERIALIZED VIEW\')')
+        view_type = self.execute(query).scalar()
+        return view_type
+
     def is_table(self, table):
         """Check if the given object is a table.
 
@@ -306,6 +384,18 @@ class Database():
         table_name = table if isinstance(table, str) else table.name
         table_type = self.get_table_type(table_name)
         return True if table_type == 'VIEW' else False
+
+    def is_materialized_view(self, view):
+        """Check if the given object is a materialized view.
+
+        Parameters
+        ----------
+        table : str or Table
+            Object to be checked.
+        """
+        view_name = view if isinstance(view, str) else view.name
+        view_type = self.get_view_type(view_name)
+        return True if view_type == 'MATERIALIZED VIEW' else False
 
     def get_column_type(self, table_name, column_name):
         table_name = table_name.upper()
@@ -373,6 +463,66 @@ class Database():
                     column = sa.cast(column, sa.DATE).label(column.name)
             normalized_columns.append(column)
         return normalized_columns
+
+    def cleanup(self):
+        """Clean up stale or completed processes from all tables.
+
+        This function removes records from the checkpoint table based on the
+        following rules:
+
+        1. Any checkpoint entry with corresponding process in logs has a status
+           indicating it is finished (e.g., D - Done, C - Canceled, X -
+           Deleted).
+
+        2. Any checkpoint entry with date older than the corresponding start
+           date in either the scheduler or api tables, indicating the process
+           has likely been restarted or superseded.
+
+        This cleanup ensures that the checkpoint table only contains active or
+        pending processes that are still valid and helps avoid race conditions
+        or stale locks.
+        """
+        checkpoint = self.tables.checkpoint
+        logs = self.tables.log
+        scheduler = self.tables.scheduler
+        api = self.tables.web_api
+
+        finished_status = ['D', 'E', 'C', 'X']
+        finished_processes = (
+            sa.select(checkpoint.c.control_id, checkpoint.c.process_id)
+              .select_from(
+                  sa.join(
+                      checkpoint, logs,
+                      checkpoint.c.process_id == logs.c.process_id
+                  )
+              ).where(logs.c.status.in_(finished_status))
+        )
+        finished_checkpoints = sa.exists(
+            finished_processes.where(
+                sa.and_(
+                    checkpoint.c.control_id == finished_processes.c.control_id,
+                    checkpoint.c.process_id == finished_processes.c.process_id
+                )
+            )
+        )
+        scheduler_reboot = sa.exists(
+            sa.select(scheduler.c.id, scheduler.c.start_date).where(
+                checkpoint.c.added < scheduler.c.start_date
+            )
+        )
+        api_reboot = sa.exists(
+            sa.select(api.c.id, api.c.start_date).where(
+                checkpoint.c.added < api.c.start_date
+            )
+        )
+        delete = sa.delete(checkpoint).where(
+            sa.or_(
+                finished_checkpoints,
+                scheduler_reboot,
+                api_reboot
+            )
+        )
+        self.execute(delete)
 
     @property
     def configured(self):

@@ -1,4 +1,4 @@
-# Rapo v0.6.5 Change Log
+# Rapo v0.6.6 Change Log
 
 ## Annotatio
 This is a new release with a lot of new features, bug fixes and improvements.
@@ -8,7 +8,7 @@ This is a new release with a lot of new features, bug fixes and improvements.
 1. **Time Windows** expands the capabilities of selecting data in controls over a specific time interval. Now data in control can be collected for any number of time periods, whether it is a day, week or month.
 1. **Timeout** as a new parameter allows you to set a time limit within which control can be executed and after which it will be canceled with status C. Currently, this is supported only for control runs via API or the `launch()` method, but not through the scheduler or basic interface, i.e. the `run()` method.
 1. **Instance Limit** as a new parameter allows you to control the number of instances of the same control running simultaneously. Currently, it is only supported when running control through the `launch()` method.
-1. **Output Limit** as a new parameter, allows you to set a limit on the number of records stored in control result tables. Currently, it only works for reconsolidations.
+1. **Output Limit** as a new parameter, allows you to set a limit on the number of records stored in control result tables. Currently, it only works for reconciliations.
 1. **Iterations** allows the same control to be executed with different settings. Currently, only **Time Windows** control parameters are supported.
 1. The new control parameter **Completion SQL** allows to perform an action upon control completion, similar to **Preparation SQL**.
 1. Now a field with the `TIMESTAMP` type can be specified as the date field for control. Important: during control execution, the field will be converted to the `DATE` type and stored in this form in the control result tables.
@@ -25,6 +25,7 @@ This is a new release with a lot of new features, bug fixes and improvements.
 1. The method for cleaning up temporary tables has been changed, which are now irrevocably deleted.
 1. Fixed an issue with performing analytical controls when more than 9 cases were configured in the control.
 1. Some parameters and functions have been laid out for future innovations and changes.
+1. UI has undergone major changes both visually and functionally to enhance the user experience, fix bugs, and support reconciliations and other new features.
 
 ## Important Changes
 This release brings some notable database schema and configuration changes described below.
@@ -161,7 +162,8 @@ The main configuration of reconciliation rules is stored as a JSON structure pop
 ```
 
 ##### Correlation Limit
-This is a reconsolidation parameter that helps protect against the issue of Cartesian joins resulting from weak or insufficient correlation configuration of data sources in control rules. When this parameter is enabled, the result of data source correlation will be limited to prevent the generation of an excessive number of records.
+This is a reconsolidation parameter that helps protect against the issue of Cartesian joins resulting from weak or insufficient correlation configuration of data sources in control rules.
+When this parameter is enabled, the result of data source correlation will be limited to prevent the generation of an excessive number of records.
 
 |         |                                                                    |
 |---------|--------------------------------------------------------------------|
@@ -169,10 +171,14 @@ This is a reconsolidation parameter that helps protect against the issue of Cart
 | integer | The algorithm will use the specified value as the maximum number of correlation records.|
 | false   | The algorithm will not apply any limits to the correlation.|
 
-Enabling this parameter may slow down data correlation by up to 30%. It is recommended to use it only during the initial stages of control development and testing.
+Enabling this parameter may slow down data correlation by up to 30%.
+It is recommended to use it only during the initial stages of control development and testing.
 
 ##### Allow Null
-A parameter for correlation fields that determines whether records with null keys should be filtered out from the data sources. By default, we assume that `allow_null=false` is the normal state, as a key should not be null. However, if in your case a null key is expected as an error and you want to detect such cases, set `allow_null=true` for the corresponding field pair in the correlation settings. This way, those records will no longer be filtered out and will appear as errors.
+A parameter for correlation fields that determines whether records with null keys should be filtered out from the data sources.
+By default, we assume that `allow_null=false` is the normal state, as a key should not be null.
+However, if in your case a null key is expected as an error and you want to detect such cases, set `allow_null=true` for the corresponding field pair in the correlation settings.
+This way, those records will no longer be filtered out and will appear as errors.
 
 #### Time Windows
 **Time Windows** are configured using the control parameters `period_back`, `period_number`, `period_type`, which allows flexible data selection in control for typical analytical time intervals. The table presents various combinations of these parameters with an explanation of the final sample.
@@ -346,6 +352,9 @@ Now control tables can be managed with new commands:
 `delete-control-output-tables`,
 `delete-control-temporary-tables`.
 
+### UI
+The user interface significantly redesigned, several bug fixes applied.
+Control views are now displayed as a table, control configuration format substantially updated, and support for reconciliations added.
 
 ---
-See commits of this release [here](https://github.com/t3eHawk/rapo/compare/v0.5.1...v0.6.5).
+See commits of this release [here](https://github.com/t3eHawk/rapo/compare/v0.5.1...v0.6.6).

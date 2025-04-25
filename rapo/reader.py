@@ -146,7 +146,7 @@ class Reader:
             if all(isinstance(i, str) and len(i) == 1 for i in statuses):
                 select = select.where(log.c.status.in_(statuses))
         if order_by:
-            select = select.order_by(log.c.process_id)
+            select = select.order_by(log.c.process_id.desc())
         result = db.execute(select, as_dict=True)
         return result
 
@@ -203,6 +203,7 @@ class Reader:
                 select
                     c.control_name,
                     c.control_id,
+                    c.control_type,
                     l.process_id,
                     nvl(l.start_date, l.added) start_date,
                     l.date_from,
@@ -233,7 +234,7 @@ class Reader:
                 where 1=1
                     and c.control_name is not null
                 order by process_id desc
-                fetch first 100 rows only
+                fetch first 200 rows only
         """
 
         result = db.execute(select)
@@ -250,15 +251,8 @@ class Reader:
     def read_datasource_columns(self, datasource_name):
         """Get list of all column names of the passed datasource_name."""
 
-        result = db.execute(f"select column_name from user_tab_cols where table_name = '{datasource_name}' order by column_id")
-        rows = [dict(row)['column_name'] for row in result]
-        return rows
-
-    def read_datasource_date_columns(self, datasource_name):
-        """Get list of all DATE type column names of the passed datasource_name."""
-
-        result = db.execute(f"select column_name from user_tab_cols where table_name = '{datasource_name}' and (data_type = 'DATE' or data_type like 'TIMESTAMP%') order by column_id")
-        rows = [dict(row)['column_name'] for row in result]
+        result = db.execute(f"select column_name, data_type from user_tab_cols where table_name = '{datasource_name}' order by column_id")
+        rows = [dict(row) for row in result]
         return rows
 
     def save_control(self, data):
@@ -269,14 +263,14 @@ class Reader:
         for k in [i for i in set(data.keys()).difference(config.columns.keys())]:
           del data[k]
 
-        data['updated_date'] = dt.datetime.now().date()
+        data['updated_date'] = dt.datetime.now()
 
         if 'control_id' in data:
             data['created_date'] = dt.datetime.strptime(data['created_date'], '%a, %d %b %Y %H:%M:%S %Z')
             update = config.update().where(config.c.control_id == data['control_id']).values(data)
             result = db.execute(update)
         else:
-            data['created_date'] = dt.datetime.now().date()
+            data['created_date'] = dt.datetime.now()
             insert = config.insert().values(data)
             result = db.execute(insert)
         return result

@@ -7,7 +7,7 @@ import calendar as cd
 import sqlalchemy as sa
 
 
-class Utils():
+class Utils:
     """Represents application utils."""
 
     def to_date(self, input):

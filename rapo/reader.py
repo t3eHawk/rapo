@@ -6,7 +6,7 @@ import sqlalchemy as sa
 from .database import db
 
 
-class Reader():
+class Reader:
     """Represents application data reader.
 
     Reader used to extract aplication data from database to user.
@@ -143,8 +143,8 @@ class Reader():
             cut_off_date = sa.func.to_date(cut_off_date, dateform)
             select = select.where(log.c.added > cut_off_date)
         if statuses:
-        if all(isinstance(i, str) and len(i) == 1 for i in statuses):
-            select = select.where(log.c.status.in_(statuses))
+            if all(isinstance(i, str) and len(i) == 1 for i in statuses):
+                select = select.where(log.c.status.in_(statuses))
         if order_by:
             select = select.order_by(log.c.process_id)
         result = db.execute(select, as_dict=True)

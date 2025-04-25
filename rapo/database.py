@@ -13,7 +13,7 @@ import sqlparse as spa
 from .config import config
 
 
-class Database():
+class Database:
     """Represent database with application schema."""
 
     ckwargs = {'literal_binds': True}
@@ -24,7 +24,7 @@ class Database():
             self.load()
             self.formatter = self.Formatter(self)
 
-    class Tables():
+    class Tables:
         """Represents database tables."""
 
         def __init__(self, database):
@@ -220,7 +220,7 @@ class Database():
                     transaction.rollback()
                 connection.close()
             finally:
-            raise error
+                raise error
         else:
             if return_connection:
                 return result, connection, transaction
@@ -229,7 +229,7 @@ class Database():
                     transaction.commit()
                 connection.close()
             finally:
-            return result
+                return result
 
     def execute_many(self, *statements, result_queue=None, **kwargs):
         """Execute given SQL statements.
@@ -302,8 +302,8 @@ class Database():
             if self.is_materialized_view(table_name):
                 query = f'drop materialized view {table_name}'
             else:
-        query = f'drop table {table_name}'
-        self.execute(query)
+                query = f'drop table {table_name}'
+            self.execute(query)
 
     def purge(self, table_name):
         """Delete database table by name permanently.
@@ -317,8 +317,8 @@ class Database():
             if self.is_materialized_view(table_name):
                 query = f'drop materialized view {table_name}'
             else:
-        query = f'drop table {table_name} purge'
-        self.execute(query)
+                query = f'drop table {table_name} purge'
+            self.execute(query)
 
     def truncate(self, table_name):
         """Clean database table by name.
@@ -495,8 +495,7 @@ class Database():
                       checkpoint, logs,
                       checkpoint.c.process_id == logs.c.process_id
                   )
-              )
-              .where(logs.c.status.in_(finished_status))
+              ).where(logs.c.status.in_(finished_status))
         )
         finished_checkpoints = sa.exists(
             finished_processes.where(

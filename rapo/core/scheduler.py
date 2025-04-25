@@ -24,7 +24,7 @@ from ..reader import reader
 from ..core.control import Control
 
 
-class Scheduler():
+class Scheduler:
     """Represents application scheduler.
 
     Application scheduler reads configuration from RAPO_CONFIG, schedule

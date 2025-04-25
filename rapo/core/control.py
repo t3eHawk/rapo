@@ -28,7 +28,7 @@ from .case import (
 )
 
 
-class Control():
+class Control:
     """Represents a control and acts like its API.
 
     Parameters
@@ -1275,8 +1275,7 @@ class Control():
         self._update_process_log(**kwargs)
 
 
-
-class Parser():
+class Parser:
     """Represents control parser."""
 
     def __init__(self, owner):
@@ -2205,7 +2204,7 @@ class Parser():
                 yield (table, pids)
 
 
-class Executor():
+class Executor:
     """Represents control executor."""
 
     def __init__(self, bind):

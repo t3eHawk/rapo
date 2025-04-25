@@ -128,6 +128,21 @@ def get_control_runs():
     return response
 
 
+@app.route('/api/read-control-logs')
+@auth.login_required
+def read_control_logs():
+    """Get list of DB datasource columns in JSON."""
+    request = flask.request
+
+    if 'control_name' in request.args:
+        rows = reader.read_control_logs(request.args['control_name'], int(request.args['days']) if 'days' in request.args else 31, ['C', 'E', 'D', 'I', 'S', 'P', 'F', 'X'])
+    else:
+        rows = []
+
+    response = flask.jsonify(rows)
+    return response
+
+
 @app.route('/api/get-datasources')
 @auth.login_required
 def get_datasources():
@@ -139,7 +154,7 @@ def get_datasources():
 
 @app.route('/api/get-datasource-columns')
 @auth.login_required
-def get_datasource_coluimns():
+def read_datasource_columns():
     """Get list of DB datasource columns in JSON."""
     request = flask.request
 
@@ -154,7 +169,7 @@ def get_datasource_coluimns():
 
 @app.route('/api/get-datasource-date-columns')
 @auth.login_required
-def get_datasource_date_coluimns():
+def read_datasource_date_columns():
     """Get list of tables in JSON."""
     request = flask.request
 

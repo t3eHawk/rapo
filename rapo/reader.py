@@ -132,7 +132,8 @@ class Reader():
         config = db.tables.config
         join = log.join(config, log.c.control_id == config.c.control_id)
         select = sa.select(log.columns).select_from(join)\
-                   .where(config.c.control_name == control_name)
+                   .where(config.c.control_name == control_name)\
+                   .order_by(log.c.added.desc())
         if isinstance(days, int):
             dateform = 'YYYY-MM-DD HH24:MI:SS'
             cut_off_date = dt.datetime.now()-dt.timedelta(days=days)
@@ -229,7 +230,7 @@ class Reader():
                 where 1=1
                     and c.control_name is not null
                 order by process_id desc
-                fetch first 500 rows only
+                fetch first 200 rows only
         """
 
         result = db.execute(select)
@@ -246,15 +247,8 @@ class Reader():
     def read_datasource_columns(self, datasource_name):
         """Get list of all column names of the passed datasource_name."""
 
-        result = db.execute(f"select column_name from user_tab_cols where table_name = '{datasource_name}' order by column_id")
-        rows = [dict(row)['column_name'] for row in result]
-        return rows
-
-    def read_datasource_date_columns(self, datasource_name):
-        """Get list of all DATE type column names of the passed datasource_name."""
-
-        result = db.execute(f"select column_name from user_tab_cols where table_name = '{datasource_name}' and (data_type = 'DATE' or data_type like 'TIMESTAMP%') order by column_id")
-        rows = [dict(row)['column_name'] for row in result]
+        result = db.execute(f"select column_name, data_type from user_tab_cols where table_name = '{datasource_name}' order by column_id")
+        rows = [dict(row) for row in result]
         return rows
 
     def save_control(self, data):

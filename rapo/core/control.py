@@ -381,7 +381,13 @@ class Control():
         """Check if control is initiated."""
         if self.status == 'I':
             return True
-        else:
+        return False
+
+    @property
+    def waiting(self):
+        """Check if control is waiting to start."""
+        if self.status == 'W':
+            return True
             return False
 
     @property
@@ -401,7 +407,8 @@ class Control():
         return False
 
     @property
-    def kept(self):
+    def blocked(self):
+        """Check if control has exceeded instance limit."""
         instance_list = reader.read_control_recent_logs(self.name)
         instance_number = len(instance_list)
         instance_limit = self.config['instance_limit']
@@ -689,6 +696,7 @@ class Control():
         """Run control in an ordinary way."""
         logger.debug(f'{self} Running control...')
         if self._initiate():
+            self._throttle()
             self._resume()
 
     def launch(self):
@@ -810,8 +818,23 @@ class Control():
                 return self._continue()
         return self._continue()
 
+    def _throttle(self):
+        logger.info(f'{self} Attempting to start from initiation queue...')
+        backoff_time = 1
+        max_wait_time = 15
+        while True:
+            with self.executor.lock():
+                if not self.blocked:
+                    logger.info(f'{self} Initiation queue passed, '
+                                'waiting to start...')
+                    self._set_as_waiting()
+                    break
+            tm.sleep(backoff_time)
+            backoff_time = min(backoff_time*2, max_wait_time)
+
     def _resume(self):
-        if self.initiated:
+        if self.initiated or self.waiting:
+            if self._start():
             if self._prepare():
                 if self._prerequisite():
                     if self._prerun_hook():
@@ -850,7 +873,7 @@ class Control():
         logger.info(f'{self} Running as process on PID {self.process.pid}')
 
     def _operate(self):
-        self._keep()
+        self._throttle()
         self._resume()
 
     def _handle(self):
@@ -995,11 +1018,14 @@ class Control():
         logger.info(f'{self} Fetching records...')
         if self.is_analysis or self.is_report:
             logger.info(f'{self} Fetching {self.source_name}...')
+            self.source_table = self.parser.parse_source_table()
             self.input_table = self.executor.fetch_records()
             self.fetched_number = self.executor.count_fetched()
             logger.info(f'{self} Records fetched: {self.fetched_number}')
             self._update(fetched_number=self.fetched_number)
         elif self.is_reconciliation or self.is_comparison:
+            self.source_table_a = self.parser.parse_source_table_a()
+            self.source_table_b = self.parser.parse_source_table_b()
             threads = []
             current = th.current_thread()
             for s in ['a', 'b']:
@@ -3170,6 +3196,54 @@ class Executor():
         if db.exists(table_name):
             db.purge(table_name)
 
+    def lock(self):
+        """Acquires a control-level lock on the control logs."""
+        class Lock:
+            """Represents a held lock of the logs for the given control."""
+
+            def __init__(self, control):
+                self.control = self.c = control
+                self._released = False
+                self._acquire()
+
+            def _acquire(self):
+                checkpoint = db.tables.checkpoint
+                backoff_time = 5
+                max_wait_time = 60
+                while True:
+                    insert = checkpoint.insert().values(
+                        control_id=self.control.id,
+                        process_id=self.control.process_id,
+                        added=dt.datetime.now()
+                    )
+                    try:
+                        db.execute(insert)
+                    except sa.exc.IntegrityError:
+                        tm.sleep(backoff_time)
+                        backoff_time = min(backoff_time+5, max_wait_time)
+                    else:
+                        break
+
+            def release(self):
+                """Commit the transaction and close the connection."""
+                if not self._released:
+                    checkpoint = db.tables.checkpoint
+                    delete = checkpoint.delete().where(
+                        sa.and_(
+                            checkpoint.c.control_id == self.control.id,
+                            checkpoint.c.process_id == self.control.process_id
+                        )
+                    )
+                    db.execute(delete)
+                    self._released = True
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, _, __, ___):
+                self.release()
+
+        return Lock(self.control)
 
     def prerun_hook(self):
         """Execute database prerun hook function."""

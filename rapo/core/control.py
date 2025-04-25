@@ -388,15 +388,14 @@ class Control():
         """Check if control is waiting to start."""
         if self.status == 'W':
             return True
-            return False
+        return False
 
     @property
     def working(self):
         """Check if control is working."""
         if self.status in ('S', 'P', 'F'):
             return True
-        else:
-            return False
+        return False
 
     @property
     def timeout(self):
@@ -776,8 +775,7 @@ class Control():
     def _deinitiate(self):
         logger.info(f'{self} Deinitiating control...')
         try:
-            self.status = None
-            self._update(status=self.status)
+            self._set_as_void()
         except Exception:
             logger.error()
         else:
@@ -788,11 +786,10 @@ class Control():
         if statement:
             logger.info(f'{self} Checking control prerequisite statement...')
             try:
-                result = db.execute(statement).scalar()
-                self.prerequisite_value = result
+                prerequisite_value = db.execute(statement).scalar()
+                self._save_prerequisite_value(prerequisite_value)
                 logger.info(f'{self} Control prerequisite statement '
                             f'returns {self.prerequisite_value}')
-                self._update(prerequisite_value=self.prerequisite_value)
                 if not self.prerequisite_value:
                     return False
             except Exception:
@@ -835,10 +832,9 @@ class Control():
     def _resume(self):
         if self.initiated or self.waiting:
             if self._start():
-            if self._prepare():
-                if self._prerequisite():
-                    if self._prerun_hook():
-                        if self._start():
+                if self._prepare():
+                    if self._prerequisite():
+                        if self._prerun_hook():
                             if self._progress():
                                 if self._finish():
                                     if self._complete():
@@ -855,13 +851,13 @@ class Control():
                         'due to a prerequisite check')
             message = ('Control execution stopped because the '
                        'PREREQUISITE check not passed')
-            self._update(text_message=message)
+            self._save_text_message(message)
 
     def _can_not_prepare(self):
         logger.info(f'{self} Control will not be resumed '
                     'due to a preparation failure')
         message = ('Control execution stopped because the PREPARATION failed')
-        self._update(text_message=message)
+        self._save_text_message(message)
 
     def _spawn(self):
         logger.debug(f'{self} Spawning new process for the control...')
@@ -893,10 +889,6 @@ class Control():
             tm.sleep(5)
             self.__dict__.update(control.__dict__)
 
-    def _keep(self):
-        while self.kept:
-            tm.sleep(60)
-
     def _wait(self):
         process = self.process
         pid = process.pid
@@ -916,14 +908,7 @@ class Control():
     def _start(self):
         logger.info(f'{self} Starting control...')
         try:
-            self.status = 'S'
-            self.start_date = dt.datetime.now()
-            self._update(status=self.status, start_date=self.start_date)
-            if self.is_analysis or self.is_report:
-                self.source_table = self.parser.parse_source_table()
-            elif self.is_reconciliation or self.is_comparison:
-                self.source_table_a = self.parser.parse_source_table_a()
-                self.source_table_b = self.parser.parse_source_table_b()
+            self._set_as_started()
         except Exception:
             logger.error()
             return self._escape()
@@ -933,8 +918,7 @@ class Control():
 
     def _progress(self):
         try:
-            self.status = 'P'
-            self._update(status=self.status)
+            self._set_as_running()
             self._fetch()
             self._execute()
             self._save()
@@ -947,7 +931,7 @@ class Control():
     def _finish(self):
         logger.info(f'{self} Finishing control...')
         try:
-            self.status = 'F'
+            self._set_as_finished()
             if not self.debug_mode:
                 self.executor.delete_temporary_tables()
         except Exception:
@@ -976,6 +960,7 @@ class Control():
     def _cancel(self):
         logger.info(f'{self} Canceling control...')
         try:
+            self._set_as_canceled()
             self.executor.delete_temporary_tables()
             self.executor.delete_output_records()
         except Exception:
@@ -985,9 +970,7 @@ class Control():
 
     def _done(self):
         try:
-            self.status = 'D'
-            self.end_date = dt.datetime.now()
-            self._update(status=self.status, end_date=self.end_date)
+            self._set_as_done()
         except Exception:
             logger.error()
             return self._escape()
@@ -997,9 +980,7 @@ class Control():
 
     def _error(self):
         try:
-            self.status = 'E'
-            self.end_date = dt.datetime.now()
-            self._update(status=self.status, end_date=self.end_date)
+            self._set_as_error()
         except Exception:
             logger.error()
         else:
@@ -1011,7 +992,7 @@ class Control():
     def _escape(self):
         self._with_error = True
         self._all_errors.append(sys.exc_info())
-        self._update(text_error=self.text_error)
+        self._save_text_error(self.text_error)
         return self._error()
 
     def _fetch(self):
@@ -1022,7 +1003,7 @@ class Control():
             self.input_table = self.executor.fetch_records()
             self.fetched_number = self.executor.count_fetched()
             logger.info(f'{self} Records fetched: {self.fetched_number}')
-            self._update(fetched_number=self.fetched_number)
+            self._save_metrics(fetched_number=self.fetched_number)
         elif self.is_reconciliation or self.is_comparison:
             self.source_table_a = self.parser.parse_source_table_a()
             self.source_table_b = self.parser.parse_source_table_b()
@@ -1038,8 +1019,8 @@ class Control():
                 thread.join()
                 if self._pending_error is not None:
                     raise self._pending_error
-            self._update(fetched_number_a=self.fetched_number_a,
-                         fetched_number_b=self.fetched_number_b)
+            self._save_metrics(fetched_number_a=self.fetched_number_a,
+                               fetched_number_b=self.fetched_number_b)
 
     def _fetch_a(self):
         try:
@@ -1086,9 +1067,9 @@ class Control():
                 self.error_table = self.executor.analyze()
                 self.error_number = self.executor.count_errors()
                 self.success_number = self.fetched_number-self.error_number
-                self._update(success_number=self.success_number,
-                             error_number=self.error_number,
-                             error_level=self.error_level)
+                self._save_metrics(success_number=self.success_number,
+                                   error_number=self.error_number,
+                                   error_level=self.error_level)
         elif self.is_reconciliation:
             if (
                 (self.fetched_number_a or 0) > 0 or
@@ -1109,12 +1090,12 @@ class Control():
                     if self.error_number_b is not None:
                         calc_number = self.fetched_number_b-self.error_number_b
                         self.success_number_b = calc_number
-                self._update(success_number_a=self.success_number_a,
-                             success_number_b=self.success_number_b,
-                             error_number_a=self.error_number_a,
-                             error_number_b=self.error_number_b,
-                             error_level_a=self.error_level_a,
-                             error_level_b=self.error_level_b)
+                self._save_metrics(success_number_a=self.success_number_a,
+                                   success_number_b=self.success_number_b,
+                                   error_number_a=self.error_number_a,
+                                   error_number_b=self.error_number_b,
+                                   error_level_a=self.error_level_a,
+                                   error_level_b=self.error_level_b)
         elif self.is_comparison:
             threads = []
             current = th.current_thread()
@@ -1128,9 +1109,9 @@ class Control():
                 thread.join()
                 if self._pending_error is not None:
                     raise self._pending_error
-            self._update(success_number=self.success_number,
-                         error_number=self.error_number,
-                         error_level=self.error_level)
+            self._save_metrics(success_number=self.success_number,
+                               error_number=self.error_number,
+                               error_level=self.error_level)
         elif self.is_report:
             if (self.fetched_number or 0) > 0:
                 self.error_table = self.executor.analyze()
@@ -1182,8 +1163,7 @@ class Control():
     def _revoke(self):
         try:
             logger.info(f'{self} Revoking control...')
-            self.status = 'X'
-            self._update(status=self.status)
+            self._set_as_revoked()
             self._delete()
         except Exception:
             logger.error()
@@ -1217,7 +1197,21 @@ class Control():
             else:
                 logger.info(f'{self} No control results to clean')
 
-    def _update(self, **kwargs):
+    def _prerun_hook(self):
+        if self.need_hook and self.need_prerun_hook:
+            hook_result, hook_code = self.executor.prerun_hook()
+            if not hook_result:
+                message = ('Control execution stopped because PRERUN HOOK ',
+                           f'function evaluated as NOT OK [{hook_code}]')
+                self._save_text_message(message)
+                return False
+        return True
+
+    def _postrun_hook(self):
+        if self.need_hook and self.need_postrun_hook:
+            self.executor.postrun_hook()
+
+    def _update_process_log(self, **kwargs):
         logger.debug(f'{self} Updating {db.tables.log} with {kwargs}')
         update = db.tables.log.update()
         update = update.values(**kwargs, updated=dt.datetime.now())
@@ -1225,19 +1219,61 @@ class Control():
         db.execute(update)
         logger.debug(f'{self} {db.tables.log} updated')
 
-    def _prerun_hook(self):
-        if self.need_hook and self.need_prerun_hook:
-            hook_result, hook_code = self.executor.prerun_hook()
-            if not hook_result:
-                message = ('Control execution stopped because PRERUN HOOK ',
-                           f'function evaluated as NOT OK [{hook_code}]')
-                self._update(text_message=message)
-                return False
-        return True
+    def _set_as_waiting(self):
+        self.status = 'W'
+        self._update_process_log(status=self.status)
 
-    def _postrun_hook(self):
-        if self.need_hook and self.need_postrun_hook:
-            self.executor.postrun_hook()
+    def _set_as_started(self):
+        self.status = 'S'
+        self.start_date = dt.datetime.now()
+        self._update_process_log(status=self.status,
+                                 start_date=self.start_date)
+
+    def _set_as_running(self):
+        self.status = 'P'
+        self._update_process_log(status=self.status)
+
+    def _set_as_finished(self):
+        self.status = 'F'
+        self._update_process_log(status=self.status)
+
+    def _set_as_done(self):
+        self.status = 'D'
+        self.end_date = dt.datetime.now()
+        self._update_process_log(status=self.status,
+                                 end_date=self.end_date)
+
+    def _set_as_error(self):
+        self.status = 'E'
+        self.end_date = dt.datetime.now()
+        self._update_process_log(status=self.status,
+                                 end_date=self.end_date)
+
+    def _set_as_canceled(self):
+        self.status = 'C'
+        self._update_process_log(status=self.status)
+
+    def _set_as_revoked(self):
+        self.status = 'X'
+        self._update_process_log(status=self.status)
+
+    def _set_as_void(self):
+        self.status = None
+        self._update_process_log(status=self.status)
+
+    def _save_prerequisite_value(self, prerequisite_value):
+        self.prerequisite_value = prerequisite_value
+        self._update_process_log(prerequisite_value=prerequisite_value)
+
+    def _save_text_message(self, text_message):
+        self._update_process_log(text_message=text_message)
+
+    def _save_text_error(self, text_error):
+        self._update_process_log(text_error=text_error)
+
+    def _save_metrics(self, **kwargs):
+        self._update_process_log(**kwargs)
+
 
 
 class Parser():
@@ -3033,10 +3069,9 @@ class Executor():
 
     def _prepare_output_table(self, table_name):
         if self.control.with_deletion or self.control.with_drop:
-            if db.engine.has_table(table_name):
-                if self.control.with_deletion:
+            if self.control.with_deletion:
                 self._clean_output_table(table_name)
-                elif self.control.with_drop:
+            elif self.control.with_drop:
                 self._delete_output_table(table_name)
         if not db.exists(table_name):
             logger.debug(f'{self.c} Table {table_name} will be created')

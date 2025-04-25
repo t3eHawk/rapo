@@ -1,4 +1,4 @@
-# Rapo v0.6.4 Change Log
+# Rapo v0.6.5 Change Log
 
 ## Annotatio
 This is a new release with a lot of new features, bug fixes and improvements.
@@ -13,7 +13,11 @@ This is a new release with a lot of new features, bug fixes and improvements.
 1. The new control parameter **Completion SQL** allows to perform an action upon control completion, similar to **Preparation SQL**.
 1. Now a field with the `TIMESTAMP` type can be specified as the date field for control. Important: during control execution, the field will be converted to the `DATE` type and stored in this form in the control result tables.
 1. New parameters have been added that contain the names of fields with unique keys for data sources. If the source is a simple *table*, the table's `ROWID` is automatically used as the key, and the specified name is used as the alias in the control result table. If the source is a *view*, the field with the specified name must contain a pre-prepared unique key.
+1. **Debug Mode** is a new control state with a special execution way in which temporary tables are not deleted.
+1. New methods added for deleting and clearing control tables. It is now possible to delete temporary tables related to a specific control process, as well as delete or clear result tables of a particular control.
+1. Naming conventions and the approach to control temporary tables updated. Controls now have mandatory temporary input tables called `SOURCE`, as well as output tables `ERROR` and `STAGE`, which store negative and positive/neutral control results, respectively.
 1. New parameters have been added that contain the types of data sources in the control for additional grouping.
+1. The `STARTED` status now reflects not only the actual start of control process, but also the execution of Preparation SQL and the calculation of the Prerequisite Value. A new status, `WAITING`, now represents the brief moment between a control leaving the process queue and the beginning of its execution.
 1. Control subtypes are no longer relevant and have been removed from control properties and system structure.
 1. New built-in case types have been added: Success, Loss, Duplicate.
 1. The interface name to work with API and GUI has been simplified.
@@ -110,6 +114,7 @@ The main configuration of reconciliation rules is stored as a JSON structure pop
     "time_shift_to": 10,
     "time_tolerance_from": -5,
     "time_tolerance_to": 5,
+    "correlation_limit": false,
     "correlation_config": [
         {
             "field_a": "key_field_name_a_1",
@@ -154,6 +159,20 @@ The main configuration of reconciliation rules is stored as a JSON structure pop
     ]
 }
 ```
+
+##### Correlation Limit
+This is a reconsolidation parameter that helps protect against the issue of Cartesian joins resulting from weak or insufficient correlation configuration of data sources in control rules. When this parameter is enabled, the result of data source correlation will be limited to prevent the generation of an excessive number of records.
+
+|         |                                                                    |
+|---------|--------------------------------------------------------------------|
+| true    | The algorithm will automatically calculate the maximum number of correlation records using the formula max(fetched_number_a, fetched_number_b)*multiplier, where the multiplier is a constant equal to 2.5.|
+| integer | The algorithm will use the specified value as the maximum number of correlation records.|
+| false   | The algorithm will not apply any limits to the correlation.|
+
+Enabling this parameter may slow down data correlation by up to 30%. It is recommended to use it only during the initial stages of control development and testing.
+
+##### Allow Null
+A parameter for correlation fields that determines whether records with null keys should be filtered out from the data sources. By default, we assume that `allow_null=false` is the normal state, as a key should not be null. However, if in your case a null key is expected as an error and you want to detect such cases, set `allow_null=true` for the corresponding field pair in the correlation settings. This way, those records will no longer be filtered out and will appear as errors.
 
 #### Time Windows
 **Time Windows** are configured using the control parameters `period_back`, `period_number`, `period_type`, which allows flexible data selection in control for typical analytical time intervals. The table presents various combinations of these parameters with an explanation of the final sample.
@@ -323,6 +342,10 @@ See the API documentation for the following requests:
 `get-control-versions`,
 `get-running-controls`.
 
+Now control tables can be managed with new commands:
+`delete-control-output-tables`,
+`delete-control-temporary-tables`.
+
 
 ---
-See commits of this release [here](https://github.com/t3eHawk/rapo/compare/v0.5.1...v0.6.4).
+See commits of this release [here](https://github.com/t3eHawk/rapo/compare/v0.5.1...v0.6.5).

@@ -1,4 +1,4 @@
-# Rapo v0.6.6 Change Log
+# Rapo v0.6.7 Change Log
 
 ## Annotatio
 This is a new release with a lot of new features, bug fixes and improvements.
@@ -357,4 +357,4 @@ The user interface significantly redesigned, several bug fixes applied.
 Control views are now displayed as a table, control configuration format substantially updated, and support for reconciliations added.
 
 ---
-See commits of this release [here](https://github.com/t3eHawk/rapo/compare/v0.5.1...v0.6.6).
+See commits of this release [here](https://github.com/t3eHawk/rapo/compare/v0.5.1...v0.6.7).

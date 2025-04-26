@@ -195,7 +195,8 @@ class Database:
         return connection
 
     def execute(self, statement, auto_commit=True, return_connection=False,
-                as_dict=False, output=None, tag=None):
+                as_records=False, as_table=False, as_one=False, as_dict=False,
+                as_scalar=False, as_generator=False, output=None, tag=None):
         """Execute given SQL statement.
 
         Returns
@@ -212,8 +213,18 @@ class Database:
             connection = self.connect()
             transaction = connection.begin()
             result = connection.execute(statement)
-            if as_dict:
+            if as_records:
+                result = [record for record in result]
+            elif as_table:
                 result = [dict(record) for record in result]
+            elif as_one or as_dict:
+                result = result.first()
+                if result and as_dict:
+                    result = dict(result)
+            elif as_scalar:
+                result = result.scalar()
+            if as_generator and (as_records or as_table):
+                result = map(lambda record: record, result)
         except Exception as error:
             try:
                 if auto_commit:
@@ -343,7 +354,7 @@ class Database:
         query = ('select object_type from user_objects '
                  f'where object_name = \'{table_name}\' '
                  'and object_type in (\'TABLE\', \'VIEW\')')
-        table_type = self.execute(query).scalar()
+        table_type = self.execute(query, as_scalar=True)
         return table_type
 
     def get_view_type(self, view_name):
@@ -358,7 +369,7 @@ class Database:
         query = ('select object_type from user_objects '
                  f'where object_name = \'{view_name}\' '
                  'and object_type in (\'VIEW\', \'MATERIALIZED VIEW\')')
-        view_type = self.execute(query).scalar()
+        view_type = self.execute(query, as_scalar=True)
         return view_type
 
     def is_table(self, table):
@@ -403,7 +414,7 @@ class Database:
         query = ('select data_type from user_tab_columns '
                  f'where table_name = \'{table_name}\' '
                  f'and column_name = \'{column_name}\'')
-        column_type = self.execute(query).scalar()
+        column_type = self.execute(query, as_scalar=True)
         return column_type
 
     def is_date(self, table, column):

@@ -264,7 +264,8 @@ class Scheduler:
             if not self.schedule or int(self.moment) % interval == 0:
                 self.schedule = dict(self._sked())
                 if self.schedule:
-                    logger.debug(f'Schedule: {self.schedule}')
+                    job_number = len(self.schedule.values())
+                    logger.debug(f'Schedule: {job_number} jobs found')
                 else:
                     logger.debug('Schedule is empty')
         except Exception:
@@ -313,11 +314,11 @@ class Scheduler:
 
     def _sked(self):
         logger.debug('Getting schedule...')
-        table = db.tables.config
-        select = table.select()
-        result = db.execute(select)
+        config = db.tables.config
+        select = config.select()
+        answerset = db.execute(select, as_records=True)
         schedule_keys = ['mday', 'wday', 'hour', 'min', 'sec']
-        for record in result:
+        for record in answerset:
             try:
                 control_name = record.control_name
                 control_status = True if record.status == 'Y' else False
@@ -401,7 +402,7 @@ class Scheduler:
         db.cleanup()
         config = db.tables.config
         select = config.select().order_by(config.c.control_id)
-        result = db.execute(select)
-        for record in result:
+        answerset = db.execute(select, as_records=True)
+        for record in answerset:
             control = Control(name=record.control_name)
             control.clean()

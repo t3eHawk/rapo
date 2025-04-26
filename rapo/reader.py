@@ -22,8 +22,7 @@ class Reader:
         """
         table = db.tables.scheduler
         select = table.select()
-        result = db.execute(select).first()
-        record = dict(result)
+        record = db.execute(select, as_dict=True)
         return record
 
     def read_web_api_record(self):
@@ -36,8 +35,7 @@ class Reader:
         """
         table = db.tables.web_api
         select = table.select()
-        result = db.execute(select).first()
-        record = dict(result)
+        record = db.execute(select, as_dict=True)
         return record
 
     def read_control_name(self, process_id):
@@ -58,7 +56,7 @@ class Reader:
         join = log.join(config, log.c.control_id == config.c.control_id)
         select = (sa.select([config.c.control_name]).select_from(join)
                     .where(log.c.process_id == process_id))
-        result = db.execute(select).first()
+        result = db.execute(select, as_one=True)
         control_name = result.control_name
         return control_name
 
@@ -78,9 +76,8 @@ class Reader:
         if process_id:
             table = db.tables.log
             select = table.select().where(table.c.process_id == process_id)
-            result = db.execute(select).first()
-            if result:
-                record = dict(result)
+            record = db.execute(select, as_dict=True)
+            if record:
                 return record
             else:
                 message = f'no process with ID {process_id} found'
@@ -103,9 +100,8 @@ class Reader:
         """
         table = db.tables.config
         select = table.select().where(table.c.control_name == control_name)
-        result = db.execute(select).first()
-        if result:
-            record = dict(result)
+        record = db.execute(select, as_dict=True)
+        if record:
             return record
         else:
             message = f'no control with name {control_name} found'
@@ -147,8 +143,8 @@ class Reader:
                 select = select.where(log.c.status.in_(statuses))
         if order_by:
             select = select.order_by(log.c.process_id.desc())
-        result = db.execute(select, as_dict=True)
-        return result
+        answerset = db.execute(select, as_table=True)
+        return answerset
 
     def read_control_recent_logs(self, control_name):
         """Retrieve logs of currently working control instances.
@@ -170,35 +166,25 @@ class Reader:
         """Get list of running controls."""
         table = db.tables.log
         select = table.select().where(table.c.status == 'P')
-        result = db.execute(select)
-        rows = [dict(row) for row in result]
-        return rows
+        answerset = db.execute(select, as_table=True)
+        return answerset
 
     def read_control_config_all(self):
         """Get list of all controls in the config table."""
         config = db.tables.config
         select = config.select().order_by(config.c.updated_date.desc())
-        result = db.execute(select)
-        rows = [dict(row) for row in result]
-        return rows
+        answerset = db.execute(select, as_table=True)
+        return answerset
 
     def read_control_config_versions(self, control_id):
         """Get an array  with all past control configurations from DB."""
         table = db.tables.config_bak
         select = table.select().where(table.c.control_id == control_id).order_by(table.c.audit_date.desc())
-        result = db.execute(select)
-        rows = [dict(row) for row in result]
-        return rows
+        answerset = db.execute(select, as_table=True)
+        return answerset
 
     def read_control_results_for_day(self):
         """Get list of all control runs for the passed for_day."""
-
-        # log = db.tables.log
-        # config = db.tables.config
-        # join = log.join(config, log.c.control_id == config.c.control_id)
-        # select = (join.select().where(sa.and_(log.c.start_date >= from_date, log.c.start_date <= to_date)))
-        # select = sa.select([config.c.control_name, log]).select_from(join).where(sa.and_(log.c.start_date >= from_date, log.c.start_date <= to_date))
-
         select = """
                 select
                     c.control_name,
@@ -236,24 +222,20 @@ class Reader:
                 order by process_id desc
                 fetch first 200 rows only
         """
-
-        result = db.execute(select)
-        rows = [dict(row) for row in result]
-        return rows
+        answerset = db.execute(select, as_table=True)
+        return answerset
 
     def read_datasources(self):
         """Get list of all datasources in the DB."""
-
-        result = db.execute("select object_name from user_objects where object_type in ('VIEW', 'TABLE') order by 1")
-        rows = [dict(row)['object_name'] for row in result]
-        return rows
+        answerset = db.execute("select object_name from user_objects where object_type in ('VIEW', 'TABLE') order by 1", as_table=True)
+        object_names = [record['object_name'] for record in answerset]
+        return object_names
 
     def read_datasource_columns(self, datasource_name):
         """Get list of all column names of the passed datasource_name."""
 
-        result = db.execute(f"select column_name, data_type from user_tab_cols where table_name = '{datasource_name}' order by column_id")
-        rows = [dict(row) for row in result]
-        return rows
+        answerset = db.execute(f"select column_name, data_type from user_tab_cols where table_name = '{datasource_name}' order by column_id", as_table=True)
+        return answerset
 
     def save_control(self, data):
         """Create or update control object in the config table with passed control data."""

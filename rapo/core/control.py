@@ -401,7 +401,7 @@ class Control:
     def timeout(self):
         """Check if control time limit is reached."""
         time_limit = self.config['timeout']
-        if self.duration > time_limit:
+        if isinstance(time_limit, int) and self.duration > time_limit:
             return True
         return False
 
@@ -786,7 +786,7 @@ class Control:
         if statement:
             logger.info(f'{self} Checking control prerequisite statement...')
             try:
-                prerequisite_value = db.execute(statement).scalar()
+                prerequisite_value = db.execute(statement, as_scalar=True)
                 self._save_prerequisite_value(prerequisite_value)
                 logger.info(f'{self} Control prerequisite statement '
                             f'returns {self.prerequisite_value}')
@@ -2197,8 +2197,8 @@ class Parser:
             text = db.formatter.document(query)
             logger.debug(f'{self.c} Searching outdated results in {table} '
                          f'with query:\n{text}')
-            result = db.execute(query)
-            pids = [row[0] for row in result]
+            answerset = db.execute(query, as_table=True)
+            pids = [record['process_id'] for record in answerset]
             logger.debug(f'{self.c} Outdated results in {table}: {pids}')
             if pids:
                 yield (table, pids)
@@ -2903,7 +2903,7 @@ class Executor:
         error_number = None
         if self.control.engine == 'DB':
             count = sa.select([sa.func.count()]).select_from(table)
-            error_number = db.execute(count).scalar()
+            error_number = db.execute(count, as_scalar=True)
         logger.debug(f'{self.c} Errors from {table.name} counted')
         return error_number
 
@@ -2922,7 +2922,7 @@ class Executor:
         result_number = None
         if self.control.engine == 'DB':
             count = sa.select([sa.func.count()]).select_from(table)
-            result_number = db.execute(count).scalar()
+            result_number = db.execute(count, as_scalar=True)
         logger.debug(f'{self.c} Results from {table.name} counted')
         return result_number
 
@@ -2938,7 +2938,7 @@ class Executor:
         if self.control.engine == 'DB':
             table = self.control.stage_table
             count = sa.select([sa.func.count()]).select_from(table)
-            matched = db.execute(count).scalar()
+            matched = db.execute(count, as_scalar=True)
         logger.debug(f'{self.c} Matched counted')
         return matched
 
@@ -2954,7 +2954,7 @@ class Executor:
         if self.control.engine == 'DB':
             table = self.control.error_table
             count = sa.select([sa.func.count()]).select_from(table)
-            mismatched = db.execute(count).scalar()
+            mismatched = db.execute(count, as_scalar=True)
         logger.debug(f'{self.c} Mismatched counted')
         return mismatched
 
@@ -3284,9 +3284,9 @@ class Executor:
         logger.debug(f'{self.c} Executing prerun hook function...')
         process_id = self.control.process_id
         select = f'select rapo_prerun_control_hook({process_id}) from dual'
-        stmt = sa.text(select)
+        query = sa.text(select)
         try:
-            result_code = db.execute(stmt).scalar()
+            result_code = db.execute(query, as_scalar=True)
             if result_code is None or result_code.upper() == 'OK':
                 logger.debug(f'{self.c} Hook function evaluated OK')
                 return True, result_code
@@ -3302,8 +3302,8 @@ class Executor:
         """Execute database postrun hook procedure."""
         logger.debug(f'{self.c} Executing postrun hook procedure...')
         process_id = self.control.process_id
-        stmt = sa.text(f'begin rapo_postrun_control_hook({process_id}); end;')
-        db.execute(stmt)
+        query = sa.text(f'begin rapo_postrun_control_hook({process_id}); end;')
+        db.execute(query)
         logger.debug(f'{self.c} Hook procedure executed')
 
     def _fetch_records_to_table(self, select, table_name):
@@ -3325,7 +3325,7 @@ class Executor:
     def _count_fetched_to_table(self, table):
         logger.debug(f'{self.c} Counting fetched in {table}...')
         count = sa.select([sa.func.count()]).select_from(table)
-        fetched = db.execute(count).scalar()
+        fetched = db.execute(count, as_scalar=True)
         logger.debug(f'{self.c} Fetched in {table} counted')
         return fetched
 

@@ -194,15 +194,7 @@ class Reader:
                     nvl(l.start_date, l.added) start_date,
                     l.date_from,
                     l.date_to,
-                    case
-                        when l.status = 'I' then 'Initiated'
-                        when l.status in ('S', 'P', 'F') then 'Running'
-                        when l.status = 'D' then 'Success'
-                        when l.status = 'E' then 'Error'
-                        when l.status = 'X' then 'Revoked'
-                        when nvl(l.status, 'C') = 'C' then 'Canceled'
-                        else l.status
-                    end status,
+                    l.status,
                     nvl(coalesce(success_number_a, success_number), 0) as success_number_a,
                     nvl(coalesce(success_number_b, 0), 0) as success_number_b,
                     nvl(coalesce(fetched_number_a, fetched_number), 0) as fetched_number_a,

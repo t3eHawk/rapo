@@ -18,14 +18,19 @@ app.static_folder = 'ui'
 logger.configure(console=False)
 
 
-@app.route('/')
-def serve_ui_index():
-    return flask.send_from_directory(app.static_folder, 'index.html')
-
-
 @app.route('/favicon.ico')
 def serve_ui_favicon():
     return flask.send_from_directory(app.static_folder, 'favicon.ico')
+
+
+@app.route('/edit-control/<int:control_id>')
+def serve_edit_control(control_id):
+    return flask.send_from_directory(app.static_folder, 'index.html')
+
+
+@app.route('/')
+def serve_ui_index():
+    return flask.send_from_directory(app.static_folder, 'index.html')
 
 
 @app.route('/<path:filename>')
@@ -161,7 +166,7 @@ def read_control_logs():
     request = flask.request
 
     if 'control_name' in request.args:
-        rows = reader.read_control_logs(request.args['control_name'], int(request.args['days']) if 'days' in request.args else 31, ['C', 'E', 'D', 'I', 'S', 'P', 'F', 'X'])
+        rows = reader.read_control_logs(request.args['control_name'], int(request.args['days']) if 'days' in request.args else 31, ['W', 'C', 'E', 'D', 'I', 'S', 'P', 'F', 'X'])
     else:
         rows = []
 
@@ -180,7 +185,7 @@ def get_datasources():
 
 @app.route('/api/get-datasource-columns')
 @auth.login_required
-def read_datasource_columns():
+def get_datasource_columns():
     """Get list of DB datasource columns in JSON."""
     request = flask.request
 
@@ -189,20 +194,6 @@ def read_datasource_columns():
     else:
         rows = []
 
-    response = flask.jsonify(rows)
-    return response
-
-
-@app.route('/api/get-datasource-date-columns')
-@auth.login_required
-def read_datasource_date_columns():
-    """Get list of tables in JSON."""
-    request = flask.request
-    if 'datasource_name' in request.args:
-        datasource_name = request.args['datasource_name']
-        rows = reader.read_datasource_date_columns(datasource_name)
-    else:
-        rows = []
     response = flask.jsonify(rows)
     return response
 

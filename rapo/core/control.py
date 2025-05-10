@@ -3178,7 +3178,20 @@ class Executor:
         elif self.control.is_comparison:
             chosen_columns.extend(self.control.output_columns)
             if not chosen_columns:
-                output_columns.extend(self.c.source_table.columns)
+                for column in self.c.source_table_a.columns:
+                    column_config = {
+                        'column': f'a_{column.name}',
+                        'column_a': column.name,
+                        'column_b': None
+                    }
+                    chosen_columns.append(column_config)
+                for column in self.c.source_table_b.columns:
+                    column_config = {
+                        'column': f'b_{column.name}',
+                        'column_b': column.name,
+                        'column_a': None
+                    }
+                    chosen_columns.append(column_config)
             date_columns.extend([self.control.source_date_field_a,
                                  self.control.source_date_field_b])
         mandatory_columns = self.control.mandatory_columns

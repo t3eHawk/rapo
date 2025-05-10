@@ -57,7 +57,7 @@ def run_control():
     date = request.args.get('date')
     date_from = request.args.get('date_from')
     date_to = request.args.get('date_to')
-    debug_mode = request.args.get('debug_mode')
+    debug_mode = request.args.get('debug_mode', 'false').lower() == 'true'
     if request.method == 'POST':
         control = Control(name, date_from=date_from, date_to=date_to,
                           date=date, debug_mode=debug_mode)

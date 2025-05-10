@@ -266,9 +266,15 @@ class Control:
         self.output_table_a = None
         self.output_table_b = None
 
-        self._with_error = False
         self._all_errors = []
+        self._with_error = False
         self._pending_error = None
+
+        self._all_messages = []
+        if self.result:
+            if self.result['text_message']:
+                text_messages = self.result['text_message'].splitlines()
+                self._all_messages.extend(text_messages)
 
     def __str__(self):
         """Take control information and represent it as a simple string.
@@ -447,6 +453,12 @@ class Control:
         errors = self._all_errors.copy()
         texts = [''.join(tb.format_exception(*error)) for error in errors]
         text = f'{str():->40}\n'.join(texts)
+        return text
+
+    @property
+    def text_message(self):
+        """Get textual message describing current control run."""
+        text = '\n'.join(self._all_messages)
         return text
 
     @property
@@ -851,13 +863,13 @@ class Control:
             logger.info(f'{self} Control will not be resumed '
                         'due to a prerequisite check')
             message = ('Control execution stopped because the '
-                       'PREREQUISITE check not passed')
+                       'PREREQUISITE check not passed.')
             self._save_text_message(message)
 
     def _can_not_prepare(self):
         logger.info(f'{self} Control will not be resumed '
                     'due to a preparation failure')
-        message = ('Control execution stopped because the PREPARATION failed')
+        message = ('Control execution stopped because the PREPARATION failed.')
         self._save_text_message(message)
 
     def _spawn(self):
@@ -910,6 +922,8 @@ class Control:
         logger.info(f'{self} Starting control...')
         try:
             self._set_as_started()
+            if self.debug_mode:
+                self._save_debug_message()
         except Exception:
             logger.error()
             return self._escape()
@@ -934,7 +948,7 @@ class Control:
         try:
             self._set_as_finished()
             if not self.debug_mode:
-                self.executor.delete_temporary_tables()
+                self._delete_temporary_tables()
         except Exception:
             logger.error()
             return self._escape()
@@ -1203,7 +1217,7 @@ class Control:
             hook_result, hook_code = self.executor.prerun_hook()
             if not hook_result:
                 message = ('Control execution stopped because PRERUN HOOK ',
-                           f'function evaluated as NOT OK [{hook_code}]')
+                           f'function evaluated as NOT OK [{hook_code}].')
                 self._save_text_message(message)
                 return False
         return True
@@ -1267,13 +1281,26 @@ class Control:
         self._update_process_log(prerequisite_value=prerequisite_value)
 
     def _save_text_message(self, text_message):
-        self._update_process_log(text_message=text_message)
+        new_record = f'{dt.datetime.now():%Y-%m-%d %H:%M:%S} - {text_message}'
+        self._all_messages.append(new_record)
+
+        control_result = reader.read_control_result(self.process_id)
+        old_message = control_result.get('text_message')
+        if old_message:
+            new_message = f'{old_message}\n{new_record}'
+        else:
+            new_message = new_record
+
+        self._update_process_log(text_message=new_message)
 
     def _save_text_error(self, text_error):
         self._update_process_log(text_error=text_error)
 
     def _save_metrics(self, **kwargs):
         self._update_process_log(**kwargs)
+
+    def _save_debug_message(self):
+        self._save_text_message('Control execution in debug mode.')
 
     def _cancel_as_request(self):
         message = 'Control execution stopped because of the request.'
@@ -1284,6 +1311,9 @@ class Control:
         message = 'Control execution stopped because of the timeout.'
         self._save_text_message(message)
         self._cancel()
+
+    def _delete_temporary_tables(self):
+        self.executor.delete_temporary_tables()
 
 
 class Parser:

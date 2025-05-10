@@ -791,6 +791,7 @@ class Control:
                 logger.info(f'{self} Control prerequisite statement '
                             f'returns {self.prerequisite_value}')
                 if not self.prerequisite_value:
+                    self._cancel()
                     return False
             except Exception:
                 logger.error()
@@ -840,10 +841,10 @@ class Control:
                                     if self._complete():
                                         if self._done():
                                             self._postrun_hook()
+                    else:
+                        self._do_not_resume()
                 else:
-                    self._do_not_resume()
-            else:
-                self._can_not_prepare()
+                    self._can_not_prepare()
 
     def _do_not_resume(self):
         if not self.prerequisite_value:
@@ -880,12 +881,12 @@ class Control:
                 logger.info(f'{self} Control cancelation request received')
                 self.process = process
                 self._terminate()
-                self._cancel()
+                self._cancel_as_request()
             elif control.timeout:
                 logger.info(f'{self} Control cancelation with timeout ')
                 self.process = process
                 self._terminate()
-                self._cancel()
+                self._cancel_as_timeout()
             tm.sleep(5)
             self.__dict__.update(control.__dict__)
 
@@ -1273,6 +1274,16 @@ class Control:
 
     def _save_metrics(self, **kwargs):
         self._update_process_log(**kwargs)
+
+    def _cancel_as_request(self):
+        message = 'Control execution stopped because of the request.'
+        self._save_text_message(message)
+        self._cancel()
+
+    def _cancel_as_timeout(self):
+        message = 'Control execution stopped because of the timeout.'
+        self._save_text_message(message)
+        self._cancel()
 
 
 class Parser:

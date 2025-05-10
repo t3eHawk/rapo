@@ -2928,8 +2928,13 @@ class Executor:
         error_number : list of int
             Number of found errors in control from side A.
         """
-        if self.control.need_a and self.control.error_table_a is not None:
-            return self._count_errors(self.control.error_table_a)
+        if self.control.need_a:
+            if self.control.error_table_a is not None:
+                rule_config = self.control.rule_config
+                need_issues_a = rule_config['need_issues_a']
+                need_recons_a = rule_config['need_recons_a']
+                if need_issues_a or need_recons_a:
+                    return self._count_errors(self.control.error_table_a)
 
     def count_errors_b(self):
         """Count found errors in control for side B.
@@ -2939,8 +2944,13 @@ class Executor:
         error_number : list of int
             Number of found errors in control from side B.
         """
-        if self.control.need_b and self.control.error_table_b is not None:
-            return self._count_errors(self.control.error_table_b)
+        if self.control.need_b:
+            if self.control.error_table_b is not None:
+                rule_config = self.control.rule_config
+                need_issues_b = rule_config['need_issues_b']
+                need_recons_b = rule_config['need_recons_b']
+                if need_issues_b or need_recons_b:
+                    return self._count_errors(self.control.error_table_b)
 
     def _count_errors(self, table):
         logger.debug(f'{self.c} Counting errors from {table.name}...')

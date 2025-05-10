@@ -1602,27 +1602,30 @@ class Parser:
         return self.control.config[filter_name]
 
     def _parse_time_shift_delta(self):
+        shift_from_sec, shift_to_sec = 0, 0
         if self.control.is_reconciliation:
             shift_from_sec = self.control.rule_config['time_shift_from']
             shift_to_sec = self.control.rule_config['time_shift_to']
-            return shift_from_sec, shift_to_sec
+        return shift_from_sec, shift_to_sec
 
     def _parse_not_null_fields_a(self):
         not_full_fields = []
-        for case in self.control.rule_config['correlation_config']:
-            field_a = case['field_a']
-            allow_null = case['allow_null']
-            if not allow_null:
-                not_full_fields.append(field_a)
+        if self.control.is_reconciliation:
+            for case in self.control.rule_config['correlation_config']:
+                field_a = case['field_a']
+                allow_null = case['allow_null']
+                if not allow_null:
+                    not_full_fields.append(field_a)
         return not_full_fields
 
     def _parse_not_null_fields_b(self):
         not_full_fields = []
-        for case in self.control.rule_config['correlation_config']:
-            field_b = case['field_b']
-            allow_null = case['allow_null']
-            if not allow_null:
-                not_full_fields.append(field_b)
+        if self.control.is_reconciliation:
+            for case in self.control.rule_config['correlation_config']:
+                field_b = case['field_b']
+                allow_null = case['allow_null']
+                if not allow_null:
+                    not_full_fields.append(field_b)
         return not_full_fields
 
     def parse_stage_tables(self):

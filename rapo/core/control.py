@@ -623,6 +623,11 @@ class Control:
         return self.parser.parse_iteration_config()
 
     @property
+    def cascade_config(self):
+        """Get control cascade configuration."""
+        return self.parser.parse_cascade_config()
+
+    @property
     def output_columns(self):
         """Get control output column configuration."""
         return self.parser.parse_output_columns()
@@ -726,6 +731,23 @@ class Control:
                                          timestamp=self.timestamp,
                                          iteration_id=iteration_id)
                 control.run()
+
+    def cascade(self):
+        """Run following controls in cascade."""
+        source_label = f'{self.name}[{self.timestamp}]'
+        for case in self.cascade_config:
+            control_name = case['control_name']
+            control_status = case['control_status']
+            control_parameters = case['control_parameters']
+            target_label = f'{control_name}[{self.timestamp}]'
+            if control_status:
+                control = self.__class__(name=control_name,
+                                         timestamp=self.timestamp,
+                                         **control_parameters)
+                logger.info(f'Initiating control {target_label}] '
+                            f'from control {source_label}...')
+                control.run()
+                logger.info(f'Control {target_label} performed')
 
     def prerequisite(self):
         """Get the result of the prerequisite statement."""
@@ -1544,7 +1566,7 @@ class Parser:
                       shift_from_sec=0, shift_to_sec=0):
         logger.debug(f'{self.c} Parsing {table} select...')
         columns = db.normalize(table.columns, date_fields=[date_field])
-        if db.is_table(table):
+        if db.is_table(table) and not db.is_column(key_field, table):
             if key_field and need_key_field:
                 key_column = db.get_rowid(key_field)
                 columns.append(key_column)
@@ -2188,6 +2210,35 @@ class Parser:
                 'status': status
             }
             output_config.append(add_config)
+        return output_config
+
+    def parse_cascade_config(self):
+        config = db.tables.config
+        select = config.select().order_by(config.c.control_id)
+        answerset = db.execute(select, as_records=True)
+        output_config = []
+        for record in answerset:
+            try:
+                control_id = record.control_id
+                control_name = record.control_name
+                control_status = True if record.status == 'Y' else False
+                control_parameters = {
+                    'debug_mode': self.control.debug_mode
+                }
+                if record.schedule_config:
+                    schedule_config = json.loads(record.schedule_config)
+                    trigger_id = schedule_config.get('trigger_id')
+                    if trigger_id and trigger_id == self.control.id:
+                        add_config = {
+                            'control_id': control_id,
+                            'control_name': control_name,
+                            'control_status': control_status,
+                            'control_parameters': control_parameters
+                        }
+                        output_config.append(add_config)
+            except Exception:
+                logger.warning()
+                continue
         return output_config
 
     def parse_parallelism_hint(self):
@@ -3161,7 +3212,11 @@ class Executor:
                 chosen_columns.extend(self.control.output_columns_a)
                 if not chosen_columns:
                     output_columns.extend(self.control.source_table_a.columns)
-                    if db.is_table(self.control.source_table_a):
+                    if (
+                        db.is_table(self.control.source_table_a)
+                        and not db.is_column(self.c.source_key_field_a,
+                                             self.c.source_table_a)
+                    ):
                         key_column = db.get_rowid(self.c.source_key_field_a)
                         key_columns.append(key_column)
                 date_columns.append(self.control.source_date_field_a)
@@ -3169,7 +3224,11 @@ class Executor:
                 chosen_columns.extend(self.control.output_columns_b)
                 if not chosen_columns:
                     output_columns.extend(self.control.source_table_b.columns)
-                    if db.is_table(self.control.source_table_b):
+                    if (
+                        db.is_table(self.control.source_table_b)
+                        and not db.is_column(self.c.source_key_field_b,
+                                             self.c.source_table_b)
+                    ):
                         key_column = db.get_rowid(self.c.source_key_field_b)
                         key_columns.append(key_column)
                 date_columns.append(self.control.source_date_field_b)
@@ -3220,6 +3279,11 @@ class Executor:
                     column = self.control.source_table_b.c[column_name]
             output_columns.append(column)
         output_columns.extend(key_columns)
+
+        mandatory_names = [i.column_name for i in mandatory_columns]
+        reserved_names = [*mandatory_names, process_id.name]
+        output_columns = [column for column in output_columns
+                          if column.name not in reserved_names]
         for mandatory_column in mandatory_columns:
             column = mandatory_column.null
             output_columns.append(column)

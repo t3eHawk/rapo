@@ -315,27 +315,26 @@ class Scheduler:
     def _sked(self):
         logger.debug('Getting schedule...')
         config = db.tables.config
-        select = config.select()
+        select = config.select().order_by(config.c.control_id)
         answerset = db.execute(select, as_records=True)
-        schedule_keys = ['mday', 'wday', 'hour', 'min', 'sec']
         for record in answerset:
             try:
                 control_name = record.control_name
                 control_status = True if record.status == 'Y' else False
+                schedule_keys = ['mday', 'wday', 'hour', 'min', 'sec']
                 schedule_config = dict.fromkeys(schedule_keys)
                 if record.schedule_config:
                     input_config = json.loads(record.schedule_config)
-                    output_config = {
-                        key: value for key, value in input_config.items()
-                        if key in schedule_keys
-                    }
+                    output_config = {k: v for k, v in input_config.items()
+                                     if k in schedule_keys}
                     schedule_config.update(output_config)
                 control_config = dict(**schedule_config, status=control_status)
             except Exception:
                 logger.warning()
                 continue
             else:
-                yield control_name, control_config
+                if control_status and any(v for v in schedule_config.values()):
+                    yield control_name, control_config
         logger.debug('Schedule retrieved')
 
     def _check(self, unit, now):
@@ -382,6 +381,7 @@ class Scheduler:
                     control = Control(name, timestamp=moment)
                     control.run()
                     control.iterate()
+                    control.cascade()
                 except Exception:
                     logger.error()
                 else:

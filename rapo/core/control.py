@@ -3103,11 +3103,11 @@ class Executor:
         process_id = self.control.key_column
         input_tables = []
         if need_issues_a:
-            error_table = self.control.error_table_a
-            input_tables.append(error_table)
+            if self.control.error_table_a is not None:
+                input_tables.append(self.control.error_table_a)
         if need_recons_a:
-            stage_table = self.control.stage_table_a
-            input_tables.append(stage_table)
+            if self.control.stage_table_a is not None:
+                input_tables.append(self.control.stage_table_a)
         for input_table in input_tables:
             input_columns = []
             for output_column in output_columns:
@@ -3133,11 +3133,11 @@ class Executor:
         process_id = self.control.key_column
         input_tables = []
         if need_issues_b:
-            error_table = self.control.error_table_b
-            input_tables.append(error_table)
+            if self.control.error_table_b is not None:
+                input_tables.append(self.control.error_table_b)
         if need_recons_b:
-            stage_table = self.control.stage_table_b
-            input_tables.append(stage_table)
+            if self.control.stage_table_b is not None:
+                input_tables.append(self.control.stage_table_b)
         for input_table in input_tables:
             input_columns = []
             for output_column in output_columns:

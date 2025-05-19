@@ -1236,7 +1236,8 @@ class Control:
         if self.need_hook and self.need_prerun_hook:
             hook_result, hook_code = self.executor.prerun_hook()
             if not hook_result:
-                message = ('Control execution stopped because PRERUN HOOK ',
+                self._cancel()
+                message = ('Control execution stopped because PRERUN HOOK '
                            f'function evaluated as NOT OK [{hook_code}].')
                 self._save_text_message(message)
                 return False

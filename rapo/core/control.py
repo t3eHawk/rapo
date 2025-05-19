@@ -277,19 +277,10 @@ class Control:
                 self._all_messages.extend(text_messages)
 
     def __str__(self):
-        """Take control information and represent it as a simple string.
+        return self.label
 
-        Returns
-        -------
-        value : str
-            Control name with or withoud process id.
-        """
-        if not self.process_id:
-            return f'[{self.name}]'
-        else:
-            return f'[{self.name}:{self.process_id}]'
-
-    __repr__ = __str__
+    def __repr__(self):
+        return self.label
 
     @property
     def name(self):
@@ -304,6 +295,13 @@ class Control:
             type = value.__class__.__name__
             message = f'name must be str or None, not {type}'
             raise TypeError(message)
+
+    @property
+    def label(self):
+        """Represent control as a simple string with or withoud process id."""
+        if not self.process_id:
+            return f'[{self.name}]'
+        return f'[{self.name}:{self.process_id}]'
 
     @property
     def date(self):
@@ -2377,9 +2375,9 @@ class Executor:
 
         def execute(*scripts):
             if scripts and len(scripts) == 1:
-                db.execute(scripts[0], output=logger.info, tag=self.control)
+                db.execute(scripts[0], output=logger.info, tag=self.c.label)
             elif scripts:
-                db.parallelize(*scripts, output=logger.info, tag=self.control)
+                db.parallelize(*scripts, output=logger.info, tag=self.c.label)
 
         def read_script(script_name):
             return utils.read_sql(f'{SQL_DIRECTORY}/{script_name}')

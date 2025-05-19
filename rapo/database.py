@@ -11,6 +11,7 @@ import cx_Oracle as oracle
 import sqlparse as spa
 
 from .config import config
+from .utils import utils
 
 
 class Database:
@@ -207,8 +208,7 @@ class Database:
         try:
             if output:
                 document = self.formatter.document(statement)
-                tag = f'{tag} ' if tag else ''
-                message = f'{tag}Running query:\n{document}'
+                message = utils.concat(tag, f'Running query:\n{document}')
                 output(message)
             connection = self.connect()
             transaction = connection.begin()
@@ -223,7 +223,7 @@ class Database:
                     result = dict(result)
             elif as_scalar:
                 result = result.scalar()
-            if as_generator and (as_records or as_table):
+            if as_generator and not (as_one or as_dict or as_scalar):
                 result = map(lambda record: record, result)
         except Exception as error:
             try:
@@ -408,7 +408,18 @@ class Database:
         view_type = self.get_view_type(view_name)
         return True if view_type == 'MATERIALIZED VIEW' else False
 
+    def is_column(self, column, table):
+        """Check if the given object is a column from table."""
+        column_name = column if isinstance(column, str) else column.name
+        table_name = table if isinstance(table, str) else table.name
+        if isinstance(table, str):
+            if self.get_column_type(table_name, column_name):
+                return True
+            return False
+        return column_name in table.columns
+
     def get_column_type(self, table_name, column_name):
+        """Get the column type by table and name."""
         table_name = table_name.upper()
         column_name = column_name.upper()
         query = ('select data_type from user_tab_columns '

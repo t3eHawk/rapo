@@ -49,6 +49,10 @@ class Utils:
         value = value.lower() if isinstance(value, str) is True else None
         return value
 
+    def concat(self, *strings, sep=' '):
+        """Concatenate the given arguments into a single string."""
+        return sep.join(string for string in strings if string)
+
     def is_config(self, value):
         """Check if the given value is valid configuration object.
 

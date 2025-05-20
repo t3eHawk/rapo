@@ -1,4 +1,4 @@
-# Rapo v0.6.8 Change Log
+# Rapo v0.6.9 Change Log
 
 ## Annotatio
 This is a new release with a lot of new features, bug fixes and improvements.
@@ -10,9 +10,10 @@ This is a new release with a lot of new features, bug fixes and improvements.
 1. **Instance Limit** as a new parameter allows you to control the number of instances of the same control running simultaneously. Currently, it is only supported when running control through the `launch()` method.
 1. **Output Limit** as a new parameter, allows you to set a limit on the number of records stored in control result tables. Currently, it only works for reconciliations.
 1. **Iterations** allows the same control to be executed with different settings. Currently, only **Time Windows** control parameters are supported.
+1. **Cascades** are a new way of planning controls that allow automation of control execution in chains, where only the first control has a scheduled start time, while the rest launch immediately after the previous one is completed.
 1. The new control parameter **Completion SQL** allows to perform an action upon control completion, similar to **Preparation SQL**.
 1. Now a field with the `TIMESTAMP` type can be specified as the date field for control. Important: during control execution, the field will be converted to the `DATE` type and stored in this form in the control result tables.
-1. New parameters have been added that contain the names of fields with unique keys for data sources. If the source is a simple *table*, the table's `ROWID` is automatically used as the key, and the specified name is used as the alias in the control result table. If the source is a *view*, the field with the specified name must contain a pre-prepared unique key.
+1. New parameters have been added that contain the names of fields with unique keys for data sources. If the source is a simple *table* without the specified field, the table's `ROWID` is automatically used as the key, and the specified name is used as the alias in the control result table. If the source is a *view*, the field with the specified name must contain a pre-prepared unique key.
 1. **Debug Mode** is a new control state with a special execution way in which temporary tables are not deleted.
 1. New methods added for deleting and clearing control tables. It is now possible to delete temporary tables related to a specific control process, as well as delete or clear result tables of a particular control.
 1. Naming conventions and the approach to control temporary tables updated. Controls now have mandatory temporary input tables called `SOURCE`, as well as output tables `ERROR` and `STAGE`, which store negative and positive/neutral control results, respectively.
@@ -339,6 +340,33 @@ Iterations configuration is represented as a JSON structure populated in the `it
 ]
 ```
 
+#### Cascade Configuration
+To configure cascades, a base control must be defined with a scheduled time, followed by a chain of controls, each linked by ID to the previous one in the chain via the special `trigger_id` parameter inside the `schedule_config` JSON field.
+
+Controls in a cascade are executed unconditionally, one after another, even if the previous control fails with an error or returns no results.
+
+Cascade execution is a part of the scheduler work and is not considered during manual control calls. If controls from a cascade need to be re-executed, each one is launched separately.
+
+In the following example, Control #1 will start on schedule at 8:30. Then, once it completes, Control #2 will launch, while Control #3 will start immediately after Control #2 finishes.
+<table>
+    <tr>
+        <th>CONTROL_ID</th>
+        <th>SCHEDULE_CONFIG</th>
+    </tr>
+    <tr>
+        <td>1</td>
+        <td><pre><code class="json">{"mday": null, "wday": null, "hour": "8", "min": "30", "sec": "0"}</code></pre></td>
+    </tr>
+    <tr>
+        <td>2</td>
+        <td><pre><code class="json">{"mday": null, "wday": null, "hour": null, "min": null, "sec": null, "trigger_id": 1}</code></pre></td>
+    </tr>
+    <tr>
+        <td>3</td>
+        <td><pre><code class="json">{"mday": null, "wday": null, "hour": null, "min": null, "sec": null, "trigger_id": 2}</code></pre></td>
+    </tr>
+</table>
+
 ### API
 Some requests now return modified structures due to schema changes and new features.
 See the API documentation for the following requests:
@@ -357,4 +385,4 @@ The user interface significantly redesigned, several bug fixes applied.
 Control views are now displayed as a table, control configuration format substantially updated, and support for reconciliations added.
 
 ---
-See commits of this release [here](https://github.com/t3eHawk/rapo/compare/v0.5.1...v0.6.8).
+See commits of this release [here](https://github.com/t3eHawk/rapo/compare/v0.5.1...v0.6.9).

@@ -1534,7 +1534,6 @@ class Parser:
                                     not_null_fields=not_null_fields,
                                     date_field=date_field,
                                     key_field=key_field,
-                                    need_key_field=True,
                                     shift_from_sec=shift_from_sec,
                                     shift_to_sec=shift_to_sec)
         return select
@@ -1556,19 +1555,17 @@ class Parser:
                                     not_null_fields=not_null_fields,
                                     date_field=date_field,
                                     key_field=key_field,
-                                    need_key_field=True,
                                     shift_from_sec=shift_from_sec,
                                     shift_to_sec=shift_to_sec)
         return select
 
     def _parse_select(self, table, literals=None, where=None,
                       not_null_fields=None, date_field=None,
-                      key_field=None, need_key_field=False,
-                      shift_from_sec=0, shift_to_sec=0):
+                      key_field=None, shift_from_sec=0, shift_to_sec=0):
         logger.debug(f'{self.c} Parsing {table} select...')
         columns = db.normalize(table.columns, date_fields=[date_field])
-        if db.is_table(table) and not db.is_column(key_field, table):
-            if key_field and need_key_field:
+        if key_field:
+            if db.is_table(table) and not db.is_column(key_field, table):
                 key_column = db.get_rowid(key_field)
                 columns.append(key_column)
         literals = literals if isinstance(literals, list) else []

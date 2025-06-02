@@ -1954,12 +1954,14 @@ class Parser:
             numeric_tolerance_from = item_config.get('numeric_tolerance_from')
             numeric_tolerance_to = item_config.get('numeric_tolerance_to')
             percentage_mode = item_config.get('percentage_mode', False)
+            formula_mode = item_config.get('formula_mode', False)
             add_config = {
                 'field_a': field_a,
                 'field_b': field_b,
                 'numeric_tolerance_from': numeric_tolerance_from or 0,
                 'numeric_tolerance_to': numeric_tolerance_to or 0,
-                'percentage_mode': percentage_mode
+                'percentage_mode': percentage_mode,
+                'formula_mode': formula_mode
             }
             discrepancy_config.append(add_config)
         output_config = {
@@ -2490,8 +2492,6 @@ class Executor:
         date_to = self.control.date_to
         time_shift_from = rule_config['time_shift_from']
         time_shift_to = rule_config['time_shift_to']
-        # time_tolerance_from = rule_config['time_tolerance_from']
-        # time_tolerance_to = rule_config['time_tolerance_to']
 
         need_issues_a = rule_config['need_issues_a']
         need_issues_b = rule_config['need_issues_b']
@@ -2502,81 +2502,83 @@ class Executor:
 
         key_fields_a = []
         key_fields_b = []
+        key_combinations = []
         for case in rule_config['correlation_config']:
             field_a = case['field_a']
-            key_fields_a.append(f'a.{field_a}')
-
             field_b = case['field_b']
-            key_fields_b.append(f'b.{field_b}')
 
-        key_list = []
+            expression_a, expression_b = f'a.{field_a}', f'b.{field_b}'
+            key_combination = [expression_a, expression_b]
+            key_fields_a.append(expression_a)
+            key_fields_b.append(expression_b)
+            key_combinations.append(key_combination)
+
         key_rules = []
-        for field_a, field_b in zip(key_fields_a, key_fields_b):
-            key_pair = f'coalesce({field_a}, {field_b})'
-            key_list.append(key_pair)
+        hash_fields = []
+        for field_a, field_b in key_combinations:
             key_rule = f'{field_a} = {field_b}'
             key_rules.append(key_rule)
-
-        keys_a = ', '.join(key_fields_a).lower()
-        keys_b = ', '.join(key_fields_b).lower()
-        key_rules = ' and '.join(key_rules).lower()
-        hash_value = '||\'|\'||'.join(key_list).lower()
+            hash_field = f'coalesce({field_a}, {field_b})'
+            hash_fields.append(hash_field)
 
         if time_shift_from == time_shift_to == 0:
-            date_rules = [date_field_a, '=', date_field_b]
+            date_rule = [date_field_a, '=', date_field_b]
         else:
-            date_formula_from = f'{date_field_b}+({time_shift_from}/86400)'
-            date_formula_to = f'{date_field_b}+({time_shift_to}/86400)'
-            date_rules = [date_field_a, 'between',
-                          date_formula_from, 'and', date_formula_to]
-        date_rules = ' '.join(date_rules)
+            range_from = f'{date_field_b}+({time_shift_from}/86400)'
+            range_to = f'{date_field_b}+({time_shift_to}/86400)'
+            date_rule = [date_field_a, 'between', range_from, 'and', range_to]
+        date_field_name_a = date_field_a[2:].upper()
+        date_field_name_b = date_field_b[2:].upper()
 
         discrepancy_fields_a = []
         discrepancy_fields_b = []
-        discrepancy_tolerances = []
+        discrepancy_combinations = []
         for case in rule_config['discrepancy_config']:
             field_a = case['field_a']
-            discrepancy_fields_a.append(f'a.{field_a}')
-
             field_b = case['field_b']
-            discrepancy_fields_b.append(f'b.{field_b}')
-
             tolerance_from = case['numeric_tolerance_from']
             tolerance_to = case['numeric_tolerance_to']
-            percentage_mode = case.get('percentage_mode', False)
-            discrepancy_tolerances.append([tolerance_from, tolerance_to,
-                                           percentage_mode])
+            percentage_mode = case['percentage_mode']
+            formula_mode = case['formula_mode']
 
-        numerics_a = (', '.join(discrepancy_fields_a)+','
-                      if discrepancy_fields_a else '')
-        numerics_b = (', '.join(discrepancy_fields_b)+','
-                      if discrepancy_fields_b else '')
-        numerics_number = len(discrepancy_tolerances)
+            if not formula_mode:
+                expression_a, expression_b = f'a.{field_a}', f'b.{field_b}'
+            else:
+                expression_a, expression_b = field_a, field_b
+            discrepancy_combination = [expression_a, expression_b,
+                                       tolerance_from, tolerance_to,
+                                       percentage_mode, formula_mode]
+            discrepancy_fields_a.append(expression_a)
+            discrepancy_fields_b.append(expression_b)
+            discrepancy_combinations.append(discrepancy_combination)
 
         discrepancy_rules = []
         discrepancy_formulas = []
         discrepancy_fields = []
         discrepancy_sums = []
+        discrepancy_descriptions_a = []
+        discrepancy_descriptions_b = []
+        discrepancy_filters_a = []
+        discrepancy_filters_b = []
         discrepancy_number = 0
-
-        for field_a, field_b, tolerance in zip(discrepancy_fields_a,
-                                               discrepancy_fields_b,
-                                               discrepancy_tolerances):
+        for field_a, field_b, *payload in discrepancy_combinations:
             discrepancy_number += 1
+            tolerance_from, tolerance_to = payload[0], payload[1]
+            percentage_mode = payload[2]
+            formula_mode = payload[3]
 
-            tolerance_from = tolerance[0]
-            tolerance_to = tolerance[1]
-            percentage_mode = tolerance[2]
             percentage_formula = discrepancy_percentage_form.format(
                 field_a=field_a,
                 field_b=field_b
             ) if percentage_mode else ''
 
+            field_desc_a = field_a[2:].upper() if not formula_mode else field_a
+            field_desc_b = field_b[2:].upper() if not formula_mode else field_b
             discrepancy_rule = discrepancy_rule_form.format(
                 field_a=field_a,
                 field_b=field_b,
-                field_name_a=field_a[2:].upper(),
-                field_name_b=field_b[2:].upper(),
+                field_desc_a=field_desc_a,
+                field_desc_b=field_desc_b,
                 tolerance_from=tolerance_from,
                 tolerance_to=tolerance_to,
                 percentage_formula=percentage_formula,
@@ -2597,38 +2599,43 @@ class Executor:
             discrepancy_sum = f'abs(discrepancy_{discrepancy_number}_value)'
             discrepancy_sums.append(discrepancy_sum)
 
+            discrepancy_description_a = discrepancy_description_form.format(
+                discrepancy_number=discrepancy_number, datasource='a')
+            discrepancy_descriptions_a.append(discrepancy_description_a)
+            discrepancy_filter_a = discrepancy_filter_form.format(
+                discrepancy_number=discrepancy_number, datasource='a')
+            discrepancy_filters_a.append(discrepancy_filter_a)
+
+            discrepancy_description_b = discrepancy_description_form.format(
+                discrepancy_number=discrepancy_number, datasource='b')
+            discrepancy_descriptions_b.append(discrepancy_description_b)
+            discrepancy_filter_b = discrepancy_filter_form.format(
+                discrepancy_number=discrepancy_number, datasource='b')
+            discrepancy_filters_b.append(discrepancy_filter_b)
+
+        key_rules = ' and '.join(key_rules).lower()
+        date_rule = ' '.join(date_rule).lower()
+        hash_value = '||\'|\'||'.join(hash_fields).lower()
+
+        keys_a = ', '.join(key_fields_a).lower()
+        numerics_a = ', '.join(discrepancy_fields_a).lower()
+        keys_b = ', '.join(key_fields_b).lower()
+        numerics_b = ', '.join(discrepancy_fields_b).lower()
+
         discrepancy_rules = ''.join(discrepancy_rules)
         discrepancy_formulas = ''.join(discrepancy_formulas)
         discrepancy_fields = ''.join(discrepancy_fields)
-        discrepancy_sums = '+'.join(discrepancy_sums) or 'null'
+        discrepancy_order_a = '+'.join(discrepancy_sums) or 'b_id'
+        discrepancy_order_b = '+'.join(discrepancy_sums) or 'a_id'
+        discrepancy_descriptions_a = ''.join(discrepancy_descriptions_a)
+        discrepancy_descriptions_b = ''.join(discrepancy_descriptions_b)
+        discrepancy_filters_a = ''.join(discrepancy_filters_a)
+        discrepancy_filters_b = ''.join(discrepancy_filters_b)
 
-        discrepancy_description_a = []
-        discrepancy_description_b = []
-        discrepancy_filter_a = []
-        discrepancy_filter_b = []
-
-        for discrepancy_number in range(1, numerics_number+1):
-            for datasource in ['a', 'b']:
-                discrepancy_description = discrepancy_description_form.format(
-                    discrepancy_number=discrepancy_number,
-                    datasource=datasource
-                )
-                discrepancy_filter = discrepancy_filter_form.format(
-                    discrepancy_number=discrepancy_number,
-                    datasource=datasource
-                )
-                if datasource == 'a':
-                    discrepancy_description_a.append(discrepancy_description)
-                    discrepancy_filter_a.append(discrepancy_filter)
-                elif datasource == 'b':
-                    discrepancy_description_b.append(discrepancy_description)
-                    discrepancy_filter_b.append(discrepancy_filter)
-
-        discrepancy_description_a = ''.join(discrepancy_description_a)
-        discrepancy_description_b = ''.join(discrepancy_description_b)
-
-        discrepancy_filter_a = ''.join(discrepancy_filter_a)
-        discrepancy_filter_b = ''.join(discrepancy_filter_b)
+        cluster_order_a = (f'{numerics_a}, {key_field_a}' if numerics_a
+                           else key_field_a)
+        cluster_order_b = (f'{numerics_b}, {key_field_b}' if numerics_b
+                           else key_field_b)
 
         target_error_types_a = ['Loss', 'Discrepancy']
         if not allow_duplicates:
@@ -2663,17 +2670,18 @@ class Executor:
             key_field_b=key_field_b,
             key_rules=key_rules,
             hash_value=hash_value,
-            date_rules=date_rules,
+            date_rule=date_rule,
             date_field_a=date_field_a,
             date_field_b=date_field_b,
-            date_field_name_a=date_field_a[2:].upper(),
-            date_field_name_b=date_field_b[2:].upper(),
+            date_field_name_a=date_field_name_a,
+            date_field_name_b=date_field_name_b,
             time_shift_from=time_shift_from,
             time_shift_to=time_shift_to,
             discrepancy_rules=discrepancy_rules,
             discrepancy_fields=discrepancy_fields,
             discrepancy_formulas=discrepancy_formulas,
-            discrepancy_sums=discrepancy_sums,
+            discrepancy_order_a=discrepancy_order_a,
+            discrepancy_order_b=discrepancy_order_b,
             fetch_limit_expression=fetch_limit_expression
         )
         organize_a = organize_a.format(
@@ -2692,7 +2700,7 @@ class Executor:
             keys_a=keys_a,
             key_field_a=key_field_a,
             date_field_a=date_field_a,
-            discrepancy_fields_a=numerics_a
+            cluster_order_a=cluster_order_a
         )
         prepare_duplicates_b = prepare_duplicates_b.format(
             process_id=self.control.process_id,
@@ -2700,7 +2708,7 @@ class Executor:
             keys_b=keys_b,
             key_field_b=key_field_b,
             date_field_b=date_field_b,
-            discrepancy_fields_b=numerics_b
+            cluster_order_b=cluster_order_b
         )
         process_duplicates = process_duplicates.format(
             process_id=self.control.process_id,
@@ -2740,8 +2748,8 @@ class Executor:
             date_field_a=date_field_a,
             date_from=date_from,
             date_to=date_to,
-            discrepancy_description_a=discrepancy_description_a,
-            discrepancy_filter_a=discrepancy_filter_a,
+            discrepancy_descriptions_a=discrepancy_descriptions_a,
+            discrepancy_filters_a=discrepancy_filters_a,
             target_error_types_a=target_error_types_a
         )
         save_error_b = save_error_b.format(
@@ -2751,8 +2759,8 @@ class Executor:
             date_field_b=date_field_b,
             date_from=date_from,
             date_to=date_to,
-            discrepancy_description_b=discrepancy_description_b,
-            discrepancy_filter_b=discrepancy_filter_b,
+            discrepancy_descriptions_b=discrepancy_descriptions_b,
+            discrepancy_filters_b=discrepancy_filters_b,
             target_error_types_b=target_error_types_b
         )
         save_stage_a = save_stage_a.format(

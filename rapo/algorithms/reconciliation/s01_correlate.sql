@@ -73,8 +73,8 @@ select {parallelism}
                                   time_shift_rank_a,
                                   time_shift_rank_b,
                                   {discrepancy_formulas}
-                                  dense_rank() over (partition by a_id order by {discrepancy_sums}) as discrepancy_rank_a,
-                                  dense_rank() over (partition by b_id order by {discrepancy_sums}) as discrepancy_rank_b,
+                                  dense_rank() over (partition by a_id order by {discrepancy_order_a}) as discrepancy_rank_a,
+                                  dense_rank() over (partition by b_id order by {discrepancy_order_b}) as discrepancy_rank_b,
                                   discrepancy_time_a,
                                   discrepancy_time_b,
                                   discrepancy_time_value
@@ -95,7 +95,7 @@ select {parallelism}
                                            86400*({date_field_a}-{date_field_b}) as discrepancy_time_value
                                       from rapo_temp_source_a_{process_id} a join rapo_temp_source_b_{process_id} b
                                            on {key_rules}
-                                           and {date_rules}
+                                           and {date_rule}
                                     {fetch_limit_expression}
                                   )
                          )

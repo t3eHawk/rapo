@@ -1,4 +1,4 @@
-# Rapo v0.6.9 Change Log
+# Rapo v0.6.10 Change Log
 
 ## Annotatio
 This is a new release with a lot of new features, bug fixes and improvements.
@@ -23,6 +23,7 @@ This is a new release with a lot of new features, bug fixes and improvements.
 1. New built-in case types have been added: Success, Loss, Duplicate.
 1. The interface name to work with API and GUI has been simplified.
 1. Logging to the console has been disabled in API server operations to avoid encoding issues in some environments.
+1. Result tables will now be created even if there are no results to save for all types of controls.
 1. The method for cleaning up temporary tables has been changed, which are now irrevocably deleted.
 1. Fixed an issue with performing analytical controls when more than 9 cases were configured in the control.
 1. Some parameters and functions have been laid out for future innovations and changes.
@@ -116,47 +117,58 @@ The main configuration of reconciliation rules is stored as a JSON structure pop
     "time_shift_to": 10,
     "time_tolerance_from": -5,
     "time_tolerance_to": 5,
+    "output_limit_a": null,
+    "output_limit_b": null,
     "correlation_limit": false,
     "correlation_config": [
         {
-            "field_a": "key_field_name_a_1",
-            "field_b": "key_field_name_b_1",
+            "field_a": "key_field_a_1",
+            "field_b": "key_field_b_1",
             "allow_null": false
         },
         {
-            "field_a": "key_field_name_a_2",
-            "field_b": "key_field_name_b_2",
+            "field_a": "key_field_a_2",
+            "field_b": "key_field_b_2",
             "allow_null": false
         },
-        ...
         {
-            "field_a": "key_field_name_a_n",
-            "field_b": "key_field_name_b_n",
+            "field_a": "key_field_a_n",
+            "field_b": "key_field_b_n",
             "allow_null": false
         }
     ],
     "discrepancy_config": [
         {
-            "field_a": "numeric_field_name_a_1",
-            "field_b": "numeric_field_name_b_1",
+            "field_a": "numeric_field_a_1",
+            "field_b": "numeric_field_b_1",
             "numeric_tolerance_from": -10,
             "numeric_tolerance_to": 10,
-            "percentage_mode": false
+            "percentage_mode": false,
+            "formula_mode": false
         },
         {
-            "field_a": "numeric_field_name_a_2",
-            "field_b": "numeric_field_name_b_2",
+            "field_a": "numeric_field_a_2",
+            "field_b": "numeric_field_b_2",
+            "numeric_tolerance_from": -10,
+            "numeric_tolerance_to": 10,
+            "percentage_mode": false,
+            "formula_mode": false
+        },
+        {
+            "field_a": "numeric_field_a_3",
+            "field_b": "numeric_field_b_3",
             "numeric_tolerance_from": -5,
             "numeric_tolerance_to": 5,
-            "percentage_mode": true
+            "percentage_mode": true,
+            "formula_mode": false
         },
-        ...
         {
-            "field_a": "numeric_field_name_a_n",
-            "field_b": "numeric_field_name_b_n",
-            "numeric_tolerance_from": 0,
-            "numeric_tolerance_to": 0,
-            "percentage_mode": false
+            "field_a": "a.numeric_field_a_1+a.numeric_field_a_2",
+            "field_b": "b.numeric_field_b_1+b.numeric_field_b_2",
+            "numeric_tolerance_from": -10,
+            "numeric_tolerance_to": 10,
+            "percentage_mode": false,
+            "formula_mode": true
         }
     ]
 }
@@ -385,4 +397,4 @@ The user interface significantly redesigned, several bug fixes applied.
 Control views are now displayed as a table, control configuration format substantially updated, and support for reconciliations added.
 
 ---
-See commits of this release [here](https://github.com/t3eHawk/rapo/compare/v0.5.1...v0.6.9).
+See commits of this release [here](https://github.com/t3eHawk/rapo/compare/v0.5.1...v0.6.10).

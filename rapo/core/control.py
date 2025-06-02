@@ -423,11 +423,12 @@ class Control:
     def error_level(self):
         """Calculate control error level."""
         if self.is_analysis:
-            if (self.fetched_number or 0) > 0:
+            if self.fetched_number and self.fetched_number > 0:
                 return (self.error_number/self.fetched_number)*100
         elif self.is_comparison:
             total_number = self.success_number+self.error_number
-            return (self.error_number/total_number)*100
+            if total_number and total_number > 0:
+                return (self.error_number/total_number)*100
 
     @property
     def error_level_a(self):
@@ -1175,19 +1176,16 @@ class Control:
     def _save(self):
         logger.info(f'{self} Saving results...')
         if self.is_analysis:
-            if self.error_number or 0 > 0:
-                self.executor.save_errors()
+            self.executor.save_errors()
         elif self.is_reconciliation:
             if self.need_a:
                 self.executor.save_reconciliation_output_a()
             if self.need_b:
                 self.executor.save_reconciliation_output_b()
         elif self.is_comparison:
-            if self.error_number or 0 > 0:
-                self.executor.save_mismatches()
+            self.executor.save_mismatches()
         elif self.is_report:
-            if self.fetched_number or 0 > 0:
-                self.executor.save_errors()
+            self.executor.save_errors()
         logger.info(f'{self} Results saved')
 
     def _delete(self):
@@ -3074,24 +3072,30 @@ class Executor:
     def save_results(self):
         """Save defined results as output records."""
         logger.debug(f'{self.c} Start saving...')
-        table = self.control.stage_table
-        process_id = self.control.key_column
-        select = sa.select([*table.columns, process_id])
-        table = self.prepare_output_table()
-        insert = table.insert().from_select(table.columns, select)
-        db.execute(insert)
-        logger.debug(f'{self.c} Saving done')
+        input_table = self.control.stage_table
+        output_table = self.prepare_output_table()
+        if input_table is not None:
+            input_columns = input_table.columns
+            output_columns = output_table.columns
+            process_id = self.control.key_column
+            select = sa.select([*input_columns, process_id])
+            insert = output_table.insert().from_select(output_columns, select)
+            db.execute(insert)
+            logger.debug(f'{self.c} Saving done')
 
     def save_errors(self):
         """Save defined errors as output records."""
         logger.debug(f'{self.c} Start saving...')
-        table = self.control.error_table
-        process_id = self.control.key_column
-        select = sa.select([*table.columns, process_id])
-        table = self.prepare_output_table()
-        insert = table.insert().from_select(table.columns, select)
-        db.execute(insert)
-        logger.debug(f'{self.c} Saving done')
+        input_table = self.control.error_table
+        output_table = self.prepare_output_table()
+        if input_table is not None:
+            input_columns = input_table.columns
+            output_columns = output_table.columns
+            process_id = self.control.key_column
+            select = sa.select([*input_columns, process_id])
+            insert = output_table.insert().from_select(output_columns, select)
+            db.execute(insert)
+            logger.debug(f'{self.c} Saving done')
 
     def save_matches(self):
         """Save found matches as RAPO results."""

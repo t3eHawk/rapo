@@ -1935,6 +1935,8 @@ class Parser:
         time_shift_to = input_config.get('time_shift_to', 0)
         time_tolerance_from = input_config.get('time_tolerance_from', 0)
         time_tolerance_to = input_config.get('time_tolerance_to', 0)
+        output_limit_a = input_config.get('output_limit_a')
+        output_limit_b = input_config.get('output_limit_b')
         correlation_limit = input_config.get('correlation_limit', False)
         correlation_config = []
         for item_config in input_config.get('correlation_config', {}):
@@ -1974,6 +1976,8 @@ class Parser:
             'time_shift_to': time_shift_to,
             'time_tolerance_from': time_tolerance_from,
             'time_tolerance_to': time_tolerance_to,
+            'output_limit_a': output_limit_a,
+            'output_limit_b': output_limit_b,
             'correlation_limit': correlation_limit,
             'correlation_config': correlation_config,
             'discrepancy_config': discrepancy_config
@@ -3106,6 +3110,8 @@ class Executor:
         output_table = self.prepare_output_table_a()
         output_columns = output_table.columns
         output_limit = self.control.config['output_limit']
+        if not output_limit:
+            output_limit = rule_config['output_limit_a']
         process_id = self.control.key_column
         input_tables = []
         if need_issues_a:
@@ -3121,7 +3127,7 @@ class Executor:
                     input_column = input_table.c[output_column.name]
                     input_columns.append(input_column)
             select = sa.select([*input_columns, process_id])
-            if output_limit:
+            if isinstance(output_limit, int) and output_limit >= 0:
                 select = select.limit(output_limit)
             insert = output_table.insert().from_select(output_columns, select)
             db.execute(insert)
@@ -3136,6 +3142,8 @@ class Executor:
         output_table = self.prepare_output_table_b()
         output_columns = output_table.columns
         output_limit = self.control.config['output_limit']
+        if not output_limit:
+            output_limit = rule_config['output_limit_b']
         process_id = self.control.key_column
         input_tables = []
         if need_issues_b:
@@ -3151,7 +3159,7 @@ class Executor:
                     input_column = input_table.c[output_column.name]
                     input_columns.append(input_column)
             select = sa.select([*input_columns, process_id])
-            if output_limit:
+            if isinstance(output_limit, int) and output_limit >= 0:
                 select = select.limit(output_limit)
             insert = output_table.insert().from_select(output_columns, select)
             db.execute(insert)

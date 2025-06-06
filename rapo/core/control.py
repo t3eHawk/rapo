@@ -1955,13 +1955,15 @@ class Parser:
             numeric_tolerance_to = item_config.get('numeric_tolerance_to')
             percentage_mode = item_config.get('percentage_mode', False)
             formula_mode = item_config.get('formula_mode', False)
+            formula_alias = item_config.get('formula_alias')
             add_config = {
                 'field_a': field_a,
                 'field_b': field_b,
                 'numeric_tolerance_from': numeric_tolerance_from or 0,
                 'numeric_tolerance_to': numeric_tolerance_to or 0,
                 'percentage_mode': percentage_mode,
-                'formula_mode': formula_mode
+                'formula_mode': formula_mode,
+                'formula_alias': formula_alias
             }
             discrepancy_config.append(add_config)
         output_config = {
@@ -2542,6 +2544,7 @@ class Executor:
             tolerance_to = case['numeric_tolerance_to']
             percentage_mode = case['percentage_mode']
             formula_mode = case['formula_mode']
+            formula_alias = case['formula_alias']
 
             if not formula_mode:
                 expression_a, expression_b = f'a.{field_a}', f'b.{field_b}'
@@ -2549,7 +2552,9 @@ class Executor:
                 expression_a, expression_b = field_a, field_b
             discrepancy_combination = [expression_a, expression_b,
                                        tolerance_from, tolerance_to,
-                                       percentage_mode, formula_mode]
+                                       percentage_mode,
+                                       formula_mode,
+                                       formula_alias]
             discrepancy_fields_a.append(expression_a)
             discrepancy_fields_b.append(expression_b)
             discrepancy_combinations.append(discrepancy_combination)
@@ -2563,19 +2568,26 @@ class Executor:
         discrepancy_filters_a = []
         discrepancy_filters_b = []
         discrepancy_number = 0
-        for field_a, field_b, *payload in discrepancy_combinations:
+        for field_a, field_b, *params in discrepancy_combinations:
             discrepancy_number += 1
-            tolerance_from, tolerance_to = payload[0], payload[1]
-            percentage_mode = payload[2]
-            formula_mode = payload[3]
+            tolerance_from, tolerance_to = params[0], params[1]
+            percentage_mode = params[2]
+            formula_mode = params[3]
+            formula_alias = params[4]
 
             percentage_formula = discrepancy_percentage_form.format(
                 field_a=field_a,
                 field_b=field_b
             ) if percentage_mode else ''
 
-            field_desc_a = field_a[2:].upper() if not formula_mode else field_a
-            field_desc_b = field_b[2:].upper() if not formula_mode else field_b
+            if formula_mode:
+                if formula_alias:
+                    field_desc_a = field_desc_b = formula_alias
+                else:
+                    field_desc_a, field_desc_b = field_a, field_b
+            else:
+                field_desc_a = field_a[2:].upper()
+                field_desc_b = field_b[2:].upper()
             discrepancy_rule = discrepancy_rule_form.format(
                 field_a=field_a,
                 field_b=field_b,

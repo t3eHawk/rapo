@@ -90,8 +90,8 @@ select {parallelism}
                                            dense_rank() over (partition by {key_field_a} order by abs(86400*({date_field_a}-{date_field_b}))) as time_shift_rank_a,
                                            dense_rank() over (partition by {key_field_b} order by abs(86400*({date_field_a}-{date_field_b}))) as time_shift_rank_b,
                                            {discrepancy_rules}
-                                           case when 86400*({date_field_a}-{date_field_b}) not between {time_shift_from} and {time_shift_to} then '{date_field_name_a}' end as discrepancy_time_a,
-                                           case when 86400*({date_field_a}-{date_field_b}) not between {time_shift_from} and {time_shift_to} then '{date_field_name_b}' end as discrepancy_time_b,
+                                           case when 86400*({date_field_a}-{date_field_b}) not between {time_tolerance_from} and {time_tolerance_to} then '{date_field_name_a}' end as discrepancy_time_a,
+                                           case when 86400*({date_field_a}-{date_field_b}) not between {time_tolerance_from} and {time_tolerance_to} then '{date_field_name_b}' end as discrepancy_time_b,
                                            86400*({date_field_a}-{date_field_b}) as discrepancy_time_value
                                       from rapo_temp_source_a_{process_id} a join rapo_temp_source_b_{process_id} b
                                            on {key_rules}

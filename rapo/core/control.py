@@ -2496,6 +2496,8 @@ class Executor:
         date_to = self.control.date_to
         time_shift_from = rule_config['time_shift_from']
         time_shift_to = rule_config['time_shift_to']
+        time_tolerance_from = rule_config['time_tolerance_from']
+        time_tolerance_to = rule_config['time_tolerance_to']
 
         need_issues_a = rule_config['need_issues_a']
         need_issues_b = rule_config['need_issues_b']
@@ -2691,6 +2693,8 @@ class Executor:
             date_field_name_b=date_field_name_b,
             time_shift_from=time_shift_from,
             time_shift_to=time_shift_to,
+            time_tolerance_from=time_tolerance_from,
+            time_tolerance_to=time_tolerance_to,
             discrepancy_rules=discrepancy_rules,
             discrepancy_fields=discrepancy_fields,
             discrepancy_formulas=discrepancy_formulas,

@@ -1,5 +1,5 @@
-# Rapo v0.6.10 Migration Instructions
-This short document describes how to upgrade Rapo from v0.5.1 to v0.6.10:
+# Rapo v0.6.11 Migration Instructions
+This short document describes how to upgrade Rapo from v0.5.1 to v0.6.11:
 
 1. Wait until all your Rapo controls are completed or cancel them. Stop the scheduler.
     ```python
@@ -25,7 +25,7 @@ This short document describes how to upgrade Rapo from v0.5.1 to v0.6.10:
     create table rapo_config_v_0_5_1 as
     select * from rapo_config;
     ```
-1. Perform module upgdate `pip install --upgrade rapo==0.6.10`.
+1. Perform module upgdate `pip install --upgrade rapo==0.6.11`.
 1. Execute migration SQL [scripts](upgrade.sql) in database, which include:
     1. Control configuration table migration to add and update parameters.
     1. Control run history table migration to update properties.

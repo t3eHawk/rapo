@@ -7,7 +7,7 @@ from (
     from rapo_temp_t01_mod_{process_id} m
          left join rapo_temp_t02_org_a_{process_id} a on a.a_id = m.a_id
          left join rapo_temp_t02_org_b_{process_id} b on b.b_id = m.b_id
-   where m.correlation_type in ('A', 'B', 'M') and m.correlation_indicator is null
+   where m.correlation_type in {conflict_types} and m.correlation_indicator is null
      and a.correlation_indicator is null and b.correlation_indicator is null
   )
 where match_position_a = 1 and match_position_b = 1

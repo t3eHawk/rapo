@@ -1929,6 +1929,7 @@ class Parser:
         need_issues_a = input_config.get('need_issues_a', False)
         need_issues_b = input_config.get('need_issues_b', False)
         allow_duplicates = input_config.get('allow_duplicates', False)
+        fuzzy_optimization = input_config.get('fuzzy_optimization', True)
         time_shift_from = input_config.get('time_shift_from', 0)
         time_shift_to = input_config.get('time_shift_to', 0)
         time_tolerance_from = input_config.get('time_tolerance_from', 0)
@@ -1972,6 +1973,7 @@ class Parser:
             'need_issues_a': need_issues_a,
             'need_issues_b': need_issues_b,
             'allow_duplicates': allow_duplicates,
+            'fuzzy_optimization': fuzzy_optimization,
             'time_shift_from': time_shift_from,
             'time_shift_to': time_shift_to,
             'time_tolerance_from': time_tolerance_from,
@@ -2504,6 +2506,7 @@ class Executor:
         need_recons_a = rule_config['need_recons_a']
         need_recons_b = rule_config['need_recons_b']
         allow_duplicates = rule_config['allow_duplicates']
+        fuzzy_optimization = rule_config['fuzzy_optimization']
         correlation_limit = rule_config.get('correlation_limit')
 
         key_fields_a = []
@@ -2653,6 +2656,11 @@ class Executor:
         cluster_order_b = (f'{numerics_b}, {key_field_b}' if numerics_b
                            else key_field_b)
 
+        if fuzzy_optimization:
+            conflict_types = '(\'A\', \'B\', \'M\')'
+        else:
+            conflict_types = '(\'F\', \'A\', \'B\', \'M\')'
+
         target_error_types_a = ['Loss', 'Discrepancy']
         if not allow_duplicates:
             target_error_types_a.append('Duplicate')
@@ -2753,6 +2761,7 @@ class Executor:
         )
         prepare_conflicts = prepare_conflicts.format(
             process_id=self.control.process_id,
+            conflict_types=conflict_types,
             parallelism=parallelism
         )
         match_conflicts = match_conflicts.format(
@@ -2806,15 +2815,16 @@ class Executor:
         organize_b = prepare_paralell(organize_b)
         execute(organize_a, organize_b)
 
-        prepare_duplicates_a = prepare_paralell(prepare_duplicates_a)
-        prepare_duplicates_b = prepare_paralell(prepare_duplicates_b)
-        execute(prepare_duplicates_a, prepare_duplicates_b)
-        execute(process_duplicates)
+        if fuzzy_optimization:
+            prepare_duplicates_a = prepare_paralell(prepare_duplicates_a)
+            prepare_duplicates_b = prepare_paralell(prepare_duplicates_b)
+            execute(prepare_duplicates_a, prepare_duplicates_b)
+            execute(process_duplicates)
 
-        match_duplicates_a = prepare_paralell(match_duplicates_a)
-        match_duplicates_b = prepare_paralell(match_duplicates_b)
-        match_duplicates = prepare_paralell(match_duplicates)
-        execute(match_duplicates_a, match_duplicates_b, match_duplicates)
+            match_duplicates_a = prepare_paralell(match_duplicates_a)
+            match_duplicates_b = prepare_paralell(match_duplicates_b)
+            match_duplicates = prepare_paralell(match_duplicates)
+            execute(match_duplicates_a, match_duplicates_b, match_duplicates)
 
         execute(prepare_conflicts)
         execute(match_conflicts)

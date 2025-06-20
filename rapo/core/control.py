@@ -2615,7 +2615,10 @@ class Executor:
             )
             discrepancy_fields.append(discrepancy_field)
 
-            discrepancy_sum = f'abs(discrepancy_{discrepancy_number}_value)'
+            if abs(tolerance_to-tolerance_from) > 0:
+                discrepancy_sum = f'power(abs(discrepancy_{discrepancy_number}_value)/{abs(tolerance_to-tolerance_from)}, 2)'
+            else:
+                discrepancy_sum = f'abs(discrepancy_{discrepancy_number}_value)'
             discrepancy_sums.append(discrepancy_sum)
 
             discrepancy_description_a = discrepancy_description_form.format(
@@ -2644,8 +2647,8 @@ class Executor:
         discrepancy_rules = ''.join(discrepancy_rules)
         discrepancy_formulas = ''.join(discrepancy_formulas)
         discrepancy_fields = ''.join(discrepancy_fields)
-        discrepancy_order_a = '+'.join(discrepancy_sums) or 'b_id'
-        discrepancy_order_b = '+'.join(discrepancy_sums) or 'a_id'
+        discrepancy_order_a = '+'.join(discrepancy_sums) or '1'
+        discrepancy_order_b = '+'.join(discrepancy_sums) or '1'
         discrepancy_descriptions_a = ''.join(discrepancy_descriptions_a)
         discrepancy_descriptions_b = ''.join(discrepancy_descriptions_b)
         discrepancy_filters_a = ''.join(discrepancy_filters_a)

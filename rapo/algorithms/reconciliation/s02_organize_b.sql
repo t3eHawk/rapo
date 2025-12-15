@@ -3,6 +3,7 @@ nologging
 as
 select {parallelism}
        {key_field_b} as b_id,
+       {numeric_formula_b} as numeric_value,
        case
             when m.one_to_one_match is not null then 'O'
             when m.fuzzy_match_conflict is not null then 'F'

@@ -1948,6 +1948,12 @@ class Parser:
             FUZZY_OPTIMIZATION,
             True)
 
+        normalization_type = input_config.get('normalization_type')
+        normalization_type = utils.coalesce(
+            normalization_type,
+            NORMALIZATION_TYPE,
+            'default')
+
         correlation_config = []
         for item_config in input_config.get('correlation_config', {}):
             field_a = item_config['field_a'].lower()
@@ -1985,6 +1991,7 @@ class Parser:
             'need_issues_b': need_issues_b,
             'allow_duplicates': allow_duplicates,
             'fuzzy_optimization': fuzzy_optimization,
+            'normalization_type': normalization_type,
             'time_shift_from': time_shift_from,
             'time_shift_to': time_shift_to,
             'time_tolerance_from': time_tolerance_from,
@@ -2496,6 +2503,11 @@ class Executor:
         discrepancy_description_form = read_expression('discrepancy_desc')
         discrepancy_filter_form = read_expression('discrepancy_filter')
 
+        distance_formula_none = read_expression('distance_formula_none')
+        distance_formula_minmax = read_expression('distance_formula_minmax')
+        distance_formula_rank = read_expression('distance_formula_rank')
+        distance_formula_z_norm = read_expression('distance_formula_z_norm')
+
         parallelism = self.control.parser.parse_parallelism_hint()
         rule_config = self.control.rule_config
 
@@ -2518,6 +2530,7 @@ class Executor:
         need_recons_b = rule_config['need_recons_b']
         allow_duplicates = rule_config['allow_duplicates']
         fuzzy_optimization = rule_config['fuzzy_optimization']
+        normalization_type = rule_config['normalization_type']
         correlation_limit = rule_config.get('correlation_limit')
 
         key_fields_a = []
@@ -2643,6 +2656,8 @@ class Executor:
                 discrepancy_number=discrepancy_number, datasource='b')
             discrepancy_filters_b.append(discrepancy_filter_b)
 
+        keys_a = ', '.join(key_fields_a).lower()
+        keys_b = ', '.join(key_fields_b).lower()
         key_rules = ' and '.join(key_rules).lower()
         date_rule = ' '.join(date_rule).lower()
         hash_value = '||\'|\'||'.join(hash_fields).lower()
@@ -2662,10 +2677,52 @@ class Executor:
         discrepancy_filters_a = ''.join(discrepancy_filters_a)
         discrepancy_filters_b = ''.join(discrepancy_filters_b)
 
-        cluster_order_a = (f'{numerics_a}, {key_field_a}' if numerics_a
-                           else key_field_a)
-        cluster_order_b = (f'{numerics_b}, {key_field_b}' if numerics_b
-                           else key_field_b)
+        distance_formulas_a = []
+        distance_formulas_b = []
+        distance_type_names = [
+            'time', *[str(i) for i in range(1, discrepancy_number+1)]
+        ]
+        if normalization_type in ['default', 'none', None]:
+            distance_formula_form = distance_formula_none
+        elif normalization_type == 'minmax':
+            distance_formula_form = distance_formula_minmax
+        elif normalization_type == 'rank':
+            distance_formula_form = distance_formula_rank
+        elif normalization_type == 'z_norm':
+            distance_formula_form = distance_formula_z_norm
+        for distance_type_name in distance_type_names:
+            distance_formula_a = distance_formula_form.format(
+                field_name=f'discrepancy_{distance_type_name}_value',
+                key_field='a_id'
+            )
+            distance_formula_b = distance_formula_form.format(
+                field_name=f'discrepancy_{distance_type_name}_value',
+                key_field='b_id'
+            )
+
+            distance_formulas_a.append(distance_formula_a)
+            distance_formulas_b.append(distance_formula_b)
+        distance_formulas_a = '+'.join(distance_formulas_a)
+        distance_formulas_b = '+'.join(distance_formulas_b)
+
+        numerics_a = []
+        for discrepancy_field_a in discrepancy_fields_a:
+            numeric_a = f'abs({discrepancy_field_a})'
+            numerics_a.append(numeric_a)
+        numerics_b = []
+        for discrepancy_field_b in discrepancy_fields_b:
+            numeric_b = f'abs({discrepancy_field_b})'
+            numerics_b.append(numeric_b)
+
+        epoch_date = f'to_date(\'1970-01-01\', \'YYYY-MM-DD\')'
+        numeric_date_a = f'86400*({date_field_a}-{epoch_date})'
+        numeric_date_b = f'86400*({date_field_b}-{epoch_date})'
+        numeric_formula_a = (numeric_date_a+
+                             ('+' if numerics_a else '')+
+                             ('+'.join(numerics_a).lower()))
+        numeric_formula_b = (numeric_date_b+
+                             ('+' if numerics_b else '')+
+                             ('+'.join(numerics_b).lower()))
 
         if fuzzy_optimization:
             conflict_types = '(\'A\', \'B\', \'M\')'
@@ -2719,33 +2776,35 @@ class Executor:
             discrepancy_formulas=discrepancy_formulas,
             discrepancy_order_a=discrepancy_order_a,
             discrepancy_order_b=discrepancy_order_b,
+            distance_formulas_a=distance_formulas_a,
+            distance_formulas_b=distance_formulas_b,
             fetch_limit_expression=fetch_limit_expression
         )
         organize_a = organize_a.format(
             process_id=self.control.process_id,
             parallelism=parallelism,
-            key_field_a=key_field_a
+            key_field_a=key_field_a,
+            numeric_formula_a=numeric_formula_a
         )
         organize_b = organize_b.format(
             process_id=self.control.process_id,
             parallelism=parallelism,
-            key_field_b=key_field_b
+            key_field_b=key_field_b,
+            numeric_formula_b=numeric_formula_b
         )
         prepare_duplicates_a = prepare_duplicates_a.format(
             process_id=self.control.process_id,
             parallelism=parallelism,
             keys_a=keys_a,
             key_field_a=key_field_a,
-            date_field_a=date_field_a,
-            cluster_order_a=cluster_order_a
+            date_field_a=date_field_a
         )
         prepare_duplicates_b = prepare_duplicates_b.format(
             process_id=self.control.process_id,
             parallelism=parallelism,
             keys_b=keys_b,
             key_field_b=key_field_b,
-            date_field_b=date_field_b,
-            cluster_order_b=cluster_order_b
+            date_field_b=date_field_b
         )
         process_duplicates = process_duplicates.format(
             process_id=self.control.process_id,

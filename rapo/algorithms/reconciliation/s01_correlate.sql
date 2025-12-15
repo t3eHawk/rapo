@@ -16,6 +16,10 @@ select {parallelism}
        discrepancy_time_value,
        total_match_number_a,
        total_match_number_b,
+       distance_value_a,
+       distance_value_b,
+       distance_rank_a,
+       distance_rank_b,
        least(total_match_number_a, total_match_number_b)/greatest(total_match_number_a, total_match_number_b) as correlation_coefficient,
        case
             when total_match_number_a = 1 and total_match_number_b = 1 then 'O'
@@ -43,7 +47,11 @@ select {parallelism}
                 discrepancy_time_b,
                 discrepancy_time_value,
                 count(distinct b_id) over (partition by hash_value, cluster_id) as total_match_number_a,
-                count(distinct a_id) over (partition by hash_value, cluster_id) as total_match_number_b
+                count(distinct a_id) over (partition by hash_value, cluster_id) as total_match_number_b,
+                distance_value_a,
+                distance_value_b,
+                row_number() over (partition by a_id order by distance_value_a, time_shift_rank_a, discrepancy_rank_a, b_id) as distance_rank_a,
+                row_number() over (partition by b_id order by distance_value_b, time_shift_rank_b, discrepancy_rank_b, a_id) as distance_rank_b
            from (
                   select {parallelism}
                          a_id,
@@ -59,7 +67,9 @@ select {parallelism}
                          discrepancy_rank_b,
                          discrepancy_time_a,
                          discrepancy_time_b,
-                         discrepancy_time_value
+                         discrepancy_time_value,
+                         {distance_formulas_a} as distance_value_a,
+                         {distance_formulas_b} as distance_value_b
                     from (
                            select {parallelism}
                                   a_id,

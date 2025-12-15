@@ -1925,6 +1925,7 @@ class Parser:
             Dictionary with reconciliation parameters.
         """
         logger.debug(f'{self.c} Parsing rule configuration...')
+
         string = self.control.config['rule_config']
         input_config = json.loads(string or '{}')
         output_config = {}
@@ -1953,6 +1954,12 @@ class Parser:
             normalization_type,
             NORMALIZATION_TYPE,
             'default')
+
+        discrepancy_matching = input_config.get('discrepancy_matching')
+        discrepancy_matching = utils.coalesce(
+            discrepancy_matching,
+            DISCREPANCY_MATCHING,
+            False)
 
         correlation_config = []
         for item_config in input_config.get('correlation_config', {}):
@@ -1984,6 +1991,7 @@ class Parser:
                 'formula_alias': formula_alias
             }
             discrepancy_config.append(add_config)
+
         output_config = {
             'need_recons_a': need_recons_a,
             'need_recons_b': need_recons_b,
@@ -1992,6 +2000,7 @@ class Parser:
             'allow_duplicates': allow_duplicates,
             'fuzzy_optimization': fuzzy_optimization,
             'normalization_type': normalization_type,
+            'discrepancy_matching': discrepancy_matching,
             'time_shift_from': time_shift_from,
             'time_shift_to': time_shift_to,
             'time_tolerance_from': time_tolerance_from,
@@ -2002,6 +2011,7 @@ class Parser:
             'correlation_config': correlation_config,
             'discrepancy_config': discrepancy_config
         }
+
         logger.debug(f'{self.c} Rule configuration parsed')
         return output_config
 
@@ -2531,6 +2541,7 @@ class Executor:
         allow_duplicates = rule_config['allow_duplicates']
         fuzzy_optimization = rule_config['fuzzy_optimization']
         normalization_type = rule_config['normalization_type']
+        discrepancy_matching = rule_config['discrepancy_matching']
         correlation_limit = rule_config.get('correlation_limit')
 
         key_fields_a = []
@@ -2729,6 +2740,12 @@ class Executor:
         else:
             conflict_types = '(\'F\', \'A\', \'B\', \'M\')'
 
+        discrepancy_matching
+        if discrepancy_matching:
+            discrepancy_matching_exp = '1 = 1'
+        else:
+            discrepancy_matching_exp = '1 = 0'
+
         target_error_types_a = ['Loss', 'Discrepancy']
         if not allow_duplicates:
             target_error_types_a.append('Duplicate')
@@ -2847,7 +2864,8 @@ class Executor:
             date_to=date_to,
             discrepancy_descriptions_a=discrepancy_descriptions_a,
             discrepancy_filters_a=discrepancy_filters_a,
-            target_error_types_a=target_error_types_a
+            target_error_types_a=target_error_types_a,
+            discrepancy_matching_exp=discrepancy_matching_exp
         )
         save_error_b = save_error_b.format(
             process_id=self.control.process_id,
@@ -2858,7 +2876,8 @@ class Executor:
             date_to=date_to,
             discrepancy_descriptions_b=discrepancy_descriptions_b,
             discrepancy_filters_b=discrepancy_filters_b,
-            target_error_types_b=target_error_types_b
+            target_error_types_b=target_error_types_b,
+            discrepancy_matching_exp=discrepancy_matching_exp
         )
         save_stage_a = save_stage_a.format(
             process_id=self.control.process_id,

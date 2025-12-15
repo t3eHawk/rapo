@@ -479,6 +479,18 @@ class Database:
         """
         return obj.compile(bind=self.engine, compile_kwargs=self.ckwargs)
 
+    def remap(self, input_table, input_columns, output_alias):
+        """Remap columns from one table into another."""
+        output_table = input_table.alias(output_alias)
+        output_columns = []
+        for input_column in input_columns:
+            if input_column.name in input_table.columns:
+                output_column = output_table.columns[input_column.name]
+                output_columns.append(output_column)
+            else:
+                output_columns.append(input_column)
+        return output_table, output_columns
+
     def normalize(self, columns, date_fields=[]):
         """Normalize list of columns."""
         normalized_columns = []

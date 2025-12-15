@@ -1532,7 +1532,7 @@ class Parser:
         key_field = self.control.source_key_field_a
         shift_from_sec, shift_to_sec = self._parse_time_shift_delta()
         not_null_fields = self._parse_not_null_fields_a()
-        select = self._parse_select(table, where=where,
+        select = self._parse_select(table, alias='a', where=where,
                                     not_null_fields=not_null_fields,
                                     date_field=date_field,
                                     key_field=key_field,
@@ -1553,7 +1553,7 @@ class Parser:
         key_field = self.control.source_key_field_b
         shift_from_sec, shift_to_sec = self._parse_time_shift_delta()
         not_null_fields = self._parse_not_null_fields_b()
-        select = self._parse_select(table, where=where,
+        select = self._parse_select(table, alias='b', where=where,
                                     not_null_fields=not_null_fields,
                                     date_field=date_field,
                                     key_field=key_field,
@@ -1561,7 +1561,7 @@ class Parser:
                                     shift_to_sec=shift_to_sec)
         return select
 
-    def _parse_select(self, table, literals=None, where=None,
+    def _parse_select(self, table, alias='s', literals=None, where=None,
                       not_null_fields=None, date_field=None,
                       key_field=None, shift_from_sec=0, shift_to_sec=0):
         logger.debug(f'{self.c} Parsing {table} select...')
@@ -1570,16 +1570,21 @@ class Parser:
             if db.is_table(table) and not db.is_column(key_field, table):
                 key_column = db.get_rowid(key_field)
                 columns.append(key_column)
+        source, columns = db.remap(table, columns, alias)
         literals = literals if isinstance(literals, list) else []
         select = sa.select([*columns, *literals])
         if where and isinstance(where, str):
-            select = select.where(sa.text(where))
+            custom_where = utils.concat('(', where, ')')
+            select = select.where(sa.text(custom_where))
         if not_null_fields and isinstance(not_null_fields, list):
             for not_null_field in not_null_fields:
-                column = table.columns[not_null_field]
+                if not_null_field in table.columns:
+                    column = source.columns[not_null_field]
+                else:
+                    column = sa.literal_column(not_null_field)
                 select = select.where(column.is_not(None))
         if date_field and isinstance(date_field, str):
-            column = table.columns[date_field]
+            column = source.columns[date_field]
             if db.is_timestamp(table, column):
                 column = sa.cast(column, sa.DATE).label(date_field)
 
@@ -1934,7 +1939,6 @@ class Parser:
         need_issues_a = input_config.get('need_issues_a', False)
         need_issues_b = input_config.get('need_issues_b', False)
         allow_duplicates = input_config.get('allow_duplicates', False)
-        fuzzy_optimization = input_config.get('fuzzy_optimization', True)
         time_shift_from = input_config.get('time_shift_from', 0)
         time_shift_to = input_config.get('time_shift_to', 0)
         time_tolerance_from = input_config.get('time_tolerance_from', 0)
@@ -1966,12 +1970,15 @@ class Parser:
             field_a = item_config['field_a'].lower()
             field_b = item_config['field_b'].lower()
             allow_null = item_config.get('allow_null', False)
+            formula_mode = item_config.get('formula_mode', False)
             add_config = {
                 'field_a': field_a,
                 'field_b': field_b,
-                'allow_null': allow_null
+                'allow_null': allow_null,
+                'formula_mode': formula_mode
             }
             correlation_config.append(add_config)
+
         discrepancy_config = []
         for item_config in input_config.get('discrepancy_config', {}):
             field_a = item_config['field_a'].lower()
@@ -2550,8 +2557,12 @@ class Executor:
         for case in rule_config['correlation_config']:
             field_a = case['field_a']
             field_b = case['field_b']
+            formula_mode = case['formula_mode']
 
-            expression_a, expression_b = f'a.{field_a}', f'b.{field_b}'
+            if not formula_mode:
+                expression_a, expression_b = f'a.{field_a}', f'b.{field_b}'
+            else:
+                expression_a, expression_b = field_a, field_b
             key_combination = [expression_a, expression_b]
             key_fields_a.append(expression_a)
             key_fields_b.append(expression_b)
@@ -2672,11 +2683,6 @@ class Executor:
         key_rules = ' and '.join(key_rules).lower()
         date_rule = ' '.join(date_rule).lower()
         hash_value = '||\'|\'||'.join(hash_fields).lower()
-
-        keys_a = ', '.join(key_fields_a).lower()
-        numerics_a = ', '.join(discrepancy_fields_a).lower()
-        keys_b = ', '.join(key_fields_b).lower()
-        numerics_b = ', '.join(discrepancy_fields_b).lower()
 
         discrepancy_rules = ''.join(discrepancy_rules)
         discrepancy_formulas = ''.join(discrepancy_formulas)

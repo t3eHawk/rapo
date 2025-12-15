@@ -5,10 +5,11 @@ import sys
 import threading as th
 import queue as qe
 
-import sqlalchemy as sa
-import cx_Oracle as oracle
+import urllib
 
+import sqlalchemy as sa
 import sqlparse as spa
+import cx_Oracle as oracle
 
 from .config import config
 from .utils import utils
@@ -161,6 +162,8 @@ class Database:
                 url = f'{vendor_name}:////{path}'
             settings = {}
         elif vendor_name == 'oracle':
+            username = urllib.parse.quote_plus(username)
+            password = urllib.parse.quote_plus(password)
             credentials = f'{username}:{password}'
             address = f'{host}:{port}'
             identifier = sid if sid else f'?service_name={service_name}'

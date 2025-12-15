@@ -18,7 +18,7 @@ class Configurator(dict):
     def __init__(self):
         super().__init__()
         if self.found:
-            names = ['SCHEDULER', 'DATABASE', 'LOGGING', 'API']
+            names = ['SCHEDULER', 'ALGORITHM', 'DATABASE', 'LOGGING', 'API']
             for name in names:
                 self[name] = Configuration(name)
             self.load()
@@ -36,7 +36,7 @@ class Configurator(dict):
 
     def normalize(self, value):
         """Normalize given parameter value."""
-        if value is None or value.upper() == 'NONE' or value.isspace():
+        if value is None or value.upper() in ['NONE', ''] or value.isspace():
             return None
         elif value.upper() == 'TRUE':
             return True
@@ -95,3 +95,13 @@ class Configuration(dict):
 
 
 config = Configurator()
+
+FUZZY_OPTIMIZATION = None
+NORMALIZATION_TYPE = None
+DISCREPANCY_MATCHING = None
+if config.found:
+    if config.check('ALGORITHM'):
+        parameters = config['ALGORITHM']
+        FUZZY_OPTIMIZATION = parameters.get('fuzzy_optimization')
+        NORMALIZATION_TYPE = parameters.get('normalization_type')
+        DISCREPANCY_MATCHING = parameters.get('discrepancy_matching')

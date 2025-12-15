@@ -18,6 +18,10 @@ from ..logger import logger
 from ..reader import reader
 from ..utils import utils
 
+from ..config import (
+    FUZZY_OPTIMIZATION, NORMALIZATION_TYPE, DISCREPANCY_MATCHING
+)
+
 from .fields import (
     RESULT_KEY, RESULT_VALUE, RESULT_TYPE, DISCREPANCY_ID,
     DISCREPANCY_DESCRIPTION
@@ -1937,6 +1941,13 @@ class Parser:
         output_limit_a = input_config.get('output_limit_a')
         output_limit_b = input_config.get('output_limit_b')
         correlation_limit = input_config.get('correlation_limit', False)
+
+        fuzzy_optimization = input_config.get('fuzzy_optimization')
+        fuzzy_optimization = utils.coalesce(
+            fuzzy_optimization,
+            FUZZY_OPTIMIZATION,
+            True)
+
         correlation_config = []
         for item_config in input_config.get('correlation_config', {}):
             field_a = item_config['field_a'].lower()

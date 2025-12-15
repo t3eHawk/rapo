@@ -53,6 +53,12 @@ class Utils:
         """Concatenate the given arguments into a single string."""
         return sep.join(string for string in strings if string)
 
+    def coalesce(self, *values):
+        """Pick first non-None value from the list."""
+        for value in values:
+            if value is not None:
+                return value
+
     def is_config(self, value):
         """Check if the given value is valid configuration object.
 

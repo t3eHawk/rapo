@@ -165,7 +165,7 @@ class Reader:
     def read_running_controls(self):
         """Get list of running controls."""
         table = db.tables.log
-        select = table.select().where(table.c.status == 'P')
+        select = table.select().where(table.c.status.in_(['I', 'P', 'W', 'S', 'F']))
         answerset = db.execute(select, as_table=True)
         return answerset
 

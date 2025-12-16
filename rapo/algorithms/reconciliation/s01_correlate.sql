@@ -9,8 +9,6 @@ select {parallelism}
        time_shift_rank_a,
        time_shift_rank_b,
        {discrepancy_fields}
-       distance_rank_a,
-       distance_rank_b,       
        discrepancy_rank_a,
        discrepancy_rank_b,
        discrepancy_time_a,
@@ -39,8 +37,6 @@ select {parallelism}
                 time_shift_rank_a,
                 time_shift_rank_b,
                 {discrepancy_fields}
-                distance_rank_a,
-                distance_rank_b,
                 discrepancy_rank_a,
                 discrepancy_rank_b,
                 discrepancy_time_a,
@@ -59,8 +55,6 @@ select {parallelism}
                          time_shift_rank_a,
                          time_shift_rank_b,
                          {discrepancy_fields}
-                         dense_rank() over (partition by a_id order by (time_distance_ratio + 1) * (discrepancy_distance_ratio + 1), discrepancy_rank_a, time_shift_rank_a) as distance_rank_a,
-                         dense_rank() over (partition by b_id order by (time_distance_ratio + 1) * (discrepancy_distance_ratio + 1), discrepancy_rank_b, time_shift_rank_b) as distance_rank_b,
                          discrepancy_rank_a,
                          discrepancy_rank_b,
                          discrepancy_time_a,
@@ -81,8 +75,6 @@ select {parallelism}
                                   {discrepancy_formulas}
                                   dense_rank() over (partition by a_id order by {discrepancy_order_a}) as discrepancy_rank_a,
                                   dense_rank() over (partition by b_id order by {discrepancy_order_b}) as discrepancy_rank_b,
-			             time_distance_ratio,
-                                  {discrepancy_order_a} discrepancy_distance_ratio,
                                   discrepancy_time_a,
                                   discrepancy_time_b,
                                   discrepancy_time_value
@@ -100,10 +92,6 @@ select {parallelism}
                                            {discrepancy_rules}
                                            case when 86400*({date_field_a}-{date_field_b}) not between {time_tolerance_from} and {time_tolerance_to} then '{date_field_name_a}' end as discrepancy_time_a,
                                            case when 86400*({date_field_a}-{date_field_b}) not between {time_tolerance_from} and {time_tolerance_to} then '{date_field_name_b}' end as discrepancy_time_b,
-                                           case 
-                                                 when ({time_tolerance_to})-({time_tolerance_from}) = 0 then abs(86400*({date_field_a}-{date_field_b}))
-                                                 else power(86400*({date_field_a}-{date_field_b})/(({time_tolerance_to})-({time_tolerance_from})), 2)
-                                           end as time_distance_ratio,
                                            86400*({date_field_a}-{date_field_b}) as discrepancy_time_value
                                       from rapo_temp_source_a_{process_id} a join rapo_temp_source_b_{process_id} b
                                            on {key_rules}

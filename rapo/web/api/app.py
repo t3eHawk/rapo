@@ -14,6 +14,7 @@ from ...core.control import Control
 
 
 app = flask.Flask(__name__)
+app.config['JSON_SORT_KEYS'] = False
 app.static_folder = 'ui'
 logger.configure(console=False)
 
@@ -52,6 +53,66 @@ def help():
     text = ''.join(lines)
     return text
 
+@app.route('/api/status')
+@auth.login_required
+def status():
+    """Get scheduler status."""
+    input_dict = reader.read_scheduler_record()
+    output_dict = {
+        'server': input_dict['server'],
+        'username': input_dict['username'],
+        'pid': input_dict['pid'],
+        'start_date': input_dict['start_date'],
+        'stop_date': input_dict['stop_date'],
+        'status':input_dict['status']
+    }
+    response = flask.jsonify(output_dict)
+    return response
+
+@app.route('/api/session')
+@auth.login_required
+def session():
+    """Get API status."""
+    input_dict = reader.read_web_api_record()
+    output_dict = {
+        'server': input_dict['server'],
+        'username': input_dict['username'],
+        'pid': input_dict['pid'],
+        'url': input_dict['url'],
+        'debug': input_dict['debug'],
+        'start_date': input_dict['start_date'],
+        'stop_date': input_dict['stop_date'],
+        'status':input_dict['status']
+    }
+    response = flask.jsonify(output_dict)
+    return response
+
+@app.route('/api/version')
+@auth.login_required
+def version():
+    """Get application version."""
+    from ... import __version__
+    response = flask.jsonify(version=__version__)
+    return response
+
+@app.route('/api/info')
+@auth.login_required
+def info():
+    """Get application info."""
+    from ...config import config
+    scheduler_config = config['SCHEDULER']
+    database_config = config['DATABASE']
+    output_dict = {
+        'instance_name': scheduler_config.get('instance_name'),
+        'schema_name': database_config['username'],
+        'database_server': database_config['host'],
+        'database_name':(
+            database_config.get('sid') or
+            database_config.get('service_name')
+        )
+    }
+    response = flask.jsonify(output_dict)
+    return response
 
 @app.route('/api/run-control', methods=['POST', 'OPTIONS'])
 @auth.login_required

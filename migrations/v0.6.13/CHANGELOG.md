@@ -1,4 +1,4 @@
-# Rapo v0.6.12 Change Log
+# Rapo v0.6.13 Change Log
 
 ## Annotatio
 This is a new release with a lot of new features, bug fixes and improvements.
@@ -111,7 +111,8 @@ The main configuration of reconciliation rules is stored as a JSON structure pop
             "numeric_tolerance_from": -10,
             "numeric_tolerance_to": 10,
             "percentage_mode": false,
-            "formula_mode": true
+            "formula_mode": true,
+            "formula_alias": "numeric_field_1_2_sum"
         }
     ]
 }
@@ -433,6 +434,13 @@ In these tables, in addition to the data source fields, a set of mandatory field
 </table>
 
 ### Configuration
+You can now assign a name to your application instance using the new parameter `instance_name` in the base **SCHEDULER** section:
+
+```
+[SCHEDULER]
+instance_name=i_am_robot
+```
+
 A new section appears in the configuration file *rapo.ini* with global algorithm settings, which can be used to change the default values for all controls at once.
 
 Each parameter in this section corresponds to the setting of the same name in the controls, but is limited by the list as in the example below.
@@ -464,4 +472,4 @@ The user interface significantly redesigned, several bug fixes applied.
 Control views are now displayed as a table, control configuration format substantially updated, and support for reconciliations added.
 
 ---
-See commits of this release [here](https://github.com/t3eHawk/rapo/compare/v0.5.1...v0.6.12).
+See commits of this release [here](https://github.com/t3eHawk/rapo/compare/v0.5.1...v0.6.13).

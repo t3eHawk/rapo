@@ -1967,10 +1967,12 @@ class Parser:
 
         correlation_config = []
         for item_config in input_config.get('correlation_config', {}):
-            field_a = item_config['field_a'].lower()
-            field_b = item_config['field_b'].lower()
+            field_a = item_config['field_a']
+            field_b = item_config['field_b']
             allow_null = item_config.get('allow_null', False)
             formula_mode = item_config.get('formula_mode', False)
+            if not formula_mode:
+                field_a, field_b = field_a.lower(), field_b.lower()
             add_config = {
                 'field_a': field_a,
                 'field_b': field_b,
@@ -1981,13 +1983,15 @@ class Parser:
 
         discrepancy_config = []
         for item_config in input_config.get('discrepancy_config', {}):
-            field_a = item_config['field_a'].lower()
-            field_b = item_config['field_b'].lower()
+            field_a = item_config['field_a']
+            field_b = item_config['field_b']
             numeric_tolerance_from = item_config.get('numeric_tolerance_from')
             numeric_tolerance_to = item_config.get('numeric_tolerance_to')
             percentage_mode = item_config.get('percentage_mode', False)
             formula_mode = item_config.get('formula_mode', False)
             formula_alias = item_config.get('formula_alias')
+            if not formula_mode:
+                field_a, field_b = field_a.lower(), field_b.lower()
             add_config = {
                 'field_a': field_a,
                 'field_b': field_b,
@@ -2678,11 +2682,11 @@ class Executor:
                 discrepancy_number=discrepancy_number, datasource='b')
             discrepancy_filters_b.append(discrepancy_filter_b)
 
-        keys_a = ', '.join(key_fields_a).lower()
-        keys_b = ', '.join(key_fields_b).lower()
-        key_rules = ' and '.join(key_rules).lower()
-        date_rule = ' '.join(date_rule).lower()
-        hash_value = '||\'|\'||'.join(hash_fields).lower()
+        keys_a = ', '.join(key_fields_a)
+        keys_b = ', '.join(key_fields_b)
+        key_rules = ' and '.join(key_rules)
+        date_rule = ' '.join(date_rule)
+        hash_value = '||\'|\'||'.join(hash_fields)
 
         discrepancy_rules = ''.join(discrepancy_rules)
         discrepancy_formulas = ''.join(discrepancy_formulas)
@@ -2736,10 +2740,10 @@ class Executor:
         numeric_date_b = f'86400*({date_field_b}-{epoch_date})'
         numeric_formula_a = (numeric_date_a+
                              ('+' if numerics_a else '')+
-                             ('+'.join(numerics_a).lower()))
+                             ('+'.join(numerics_a)))
         numeric_formula_b = (numeric_date_b+
                              ('+' if numerics_b else '')+
-                             ('+'.join(numerics_b).lower()))
+                             ('+'.join(numerics_b)))
 
         if fuzzy_optimization:
             conflict_types = '(\'A\', \'B\', \'M\')'

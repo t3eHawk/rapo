@@ -1,0 +1,1 @@
+case when {tolerance_from} = {tolerance_to} then abs({field_name}) else power({field_name}/(({tolerance_to})-({tolerance_from})), 2) end

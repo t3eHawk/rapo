@@ -1963,7 +1963,7 @@ class Parser:
         discrepancy_matching = utils.coalesce(
             discrepancy_matching,
             DISCREPANCY_MATCHING,
-            False)
+            True)
 
         correlation_config = []
         for item_config in input_config.get('correlation_config', {}):

@@ -1963,7 +1963,7 @@ class Parser:
         discrepancy_matching = utils.coalesce(
             discrepancy_matching,
             DISCREPANCY_MATCHING,
-            False)
+            True)
 
         correlation_config = []
         for item_config in input_config.get('correlation_config', {}):
@@ -2528,6 +2528,7 @@ class Executor:
         distance_formula_minmax = read_expression('distance_formula_minmax')
         distance_formula_rank = read_expression('distance_formula_rank')
         distance_formula_z_norm = read_expression('distance_formula_z_norm')
+        distance_formula_srd = read_expression('distance_formula_srd')
 
         parallelism = self.control.parser.parse_parallelism_hint()
         rule_config = self.control.rule_config
@@ -2711,14 +2712,20 @@ class Executor:
             distance_formula_form = distance_formula_rank
         elif normalization_type == 'z_norm':
             distance_formula_form = distance_formula_z_norm
+        elif normalization_type == 'srd':
+            distance_formula_form = distance_formula_srd
         for distance_type_name in distance_type_names:
             distance_formula_a = distance_formula_form.format(
                 field_name=f'discrepancy_{distance_type_name}_value',
-                key_field='a_id'
+                key_field='a_id',
+                tolerance_from = time_tolerance_from if distance_type_name == 'time' else discrepancy_combinations[int(distance_type_name)-1][2],
+                tolerance_to = time_tolerance_to if distance_type_name == 'time' else discrepancy_combinations[int(distance_type_name)-1][3]
             )
             distance_formula_b = distance_formula_form.format(
                 field_name=f'discrepancy_{distance_type_name}_value',
-                key_field='b_id'
+                key_field='b_id',
+                tolerance_from = time_tolerance_from if distance_type_name == 'time' else discrepancy_combinations[int(distance_type_name)-1][2],
+                tolerance_to = time_tolerance_to if distance_type_name == 'time' else discrepancy_combinations[int(distance_type_name)-1][3]
             )
 
             distance_formulas_a.append(distance_formula_a)

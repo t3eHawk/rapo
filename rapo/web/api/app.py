@@ -53,6 +53,7 @@ def help():
     text = ''.join(lines)
     return text
 
+
 @app.route('/api/status')
 @auth.login_required
 def status():
@@ -64,10 +65,11 @@ def status():
         'pid': input_dict['pid'],
         'start_date': input_dict['start_date'],
         'stop_date': input_dict['stop_date'],
-        'status':input_dict['status']
+        'status': input_dict['status']
     }
     response = flask.jsonify(output_dict)
     return response
+
 
 @app.route('/api/session')
 @auth.login_required
@@ -82,10 +84,11 @@ def session():
         'debug': input_dict['debug'],
         'start_date': input_dict['start_date'],
         'stop_date': input_dict['stop_date'],
-        'status':input_dict['status']
+        'status': input_dict['status']
     }
     response = flask.jsonify(output_dict)
     return response
+
 
 @app.route('/api/version')
 @auth.login_required
@@ -94,6 +97,7 @@ def version():
     from ... import __version__
     response = flask.jsonify(version=__version__)
     return response
+
 
 @app.route('/api/info')
 @auth.login_required
@@ -106,13 +110,54 @@ def info():
         'instance_name': scheduler_config.get('instance_name'),
         'schema_name': database_config['username'],
         'database_server': database_config['host'],
-        'database_name':(
+        'database_name': (
             database_config.get('sid') or
             database_config.get('service_name')
         )
     }
     response = flask.jsonify(output_dict)
     return response
+
+
+@app.route('/api/parameters')
+@auth.login_required
+def parameters():
+    """Get application info."""
+    from ...config import config
+    scheduler_config = config['SCHEDULER']
+    algorithm_config = config['ALGORITHM']
+    database_config = config['DATABASE']
+    logging_config = config['LOGGING']
+    output_dict = {
+        'control_parallelism': scheduler_config.get('control_parallelism'),
+        'refresh_interval': scheduler_config.get('refresh_interval'),
+        'maintenance_interval': scheduler_config.get('maintenance_interval'),
+        'database_report_interval': scheduler_config.get(
+            'database_report_interval'
+        ),
+        'fuzzy_optimization': algorithm_config.get('fuzzy_optimization'),
+        'normalization_type': algorithm_config.get('normalization_type'),
+        'discrepancy_matching': algorithm_config.get('discrepancy_matching'),
+        'database': {
+            'max_overflow': database_config.get('max_overflow'),
+            'pool_pre_ping': database_config.get('pool_pre_ping'),
+            'pool_size': database_config.get('pool_size'),
+            'pool_recycle': database_config.get('pool_recycle'),
+            'pool_timeout': database_config.get('pool_timeout')
+        },
+        'logging': {
+            'console': logging_config.get('console'),
+            'file': logging_config.get('file'),
+            'info': logging_config.get('info'),
+            'debug': logging_config.get('debug'),
+            'error': logging_config.get('error'),
+            'warning': logging_config.get('warning'),
+            'critical': logging_config.get('critical')
+        }
+    }
+    response = flask.jsonify(output_dict)
+    return response
+
 
 @app.route('/api/run-control', methods=['POST', 'OPTIONS'])
 @auth.login_required
@@ -227,7 +272,10 @@ def read_control_logs():
     request = flask.request
 
     if 'control_name' in request.args:
-        rows = reader.read_control_logs(request.args['control_name'], int(request.args['days']) if 'days' in request.args else 31, ['W', 'C', 'E', 'D', 'I', 'S', 'P', 'F', 'X'])
+        rows = reader.read_control_logs(
+            request.args['control_name'],
+            int(request.args['days']) if 'days' in request.args else 31,
+            ['W', 'C', 'E', 'D', 'I', 'S', 'P', 'F', 'X'])
     else:
         rows = []
 
